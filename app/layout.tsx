@@ -6,7 +6,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
     <html lang="de"><body>
       <nav>
         <Link href="/">Dashboard</Link><Link href="/projekte">Projekte</Link><Link href="/naehte">Nähte</Link><Link href="/wps">WPS</Link><Link href="/wpqr">WPQR</Link>
-        <Link href="/schweisser">Schweißer</Link><Link href="/deckung">Deckungsprüfung</Link>
+        <Link href="/schweisser">Schweißer</Link><Link href="/deckung">Deckungsprüfung</Link><Link href="/admin">Admin</Link>
       </nav>
       <main>{children}</main>
     </body></html>

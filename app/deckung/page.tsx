@@ -1,34 +1,24 @@
 import { ctx } from "@/lib/tenant";
-import { gesamt, schweisserGegenWps, wpsGegenWpqr } from "@/lib/deckung";
+import { ladeDeckung } from "@/lib/deckung-load";
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ rev?: string; welder?: string; wpqr?: string }> }) {
-  const { rev, welder, wpqr } = await searchParams;
+  const sp = await searchParams;
   const { sb } = await ctx();
-  const [{ data: revs }, { data: welders }, { data: qs }] = await Promise.all([
-    sb.from("wps_revisions").select("id,revision,process,material_group,thickness_min,thickness_max,diameter_min,wps(wps_no)").order("created_at"),
-    sb.from("welders").select("id,name,welder_certificates(process,material_group,thickness_min,thickness_max,diameter_min,valid_until)").order("name"),
-    sb.from("wpqr").select("id,wpqr_no,process,material_group").order("wpqr_no"),
-  ]);
-  const r = (revs as any[] | null)?.find((x) => x.id === rev);
-  const w = (welders as any[] | null)?.find((x) => x.id === welder);
-  const q = (qs as any[] | null)?.find((x) => x.id === wpqr);
-  const blocks: { titel: string; punkte: ReturnType<typeof wpsGegenWpqr> }[] = [];
-  if (r && w) for (const c of w.welder_certificates as any[]) blocks.push({ titel: `Schweißer ${w.name} ↔ WPS`, punkte: schweisserGegenWps(r, c) });
-  if (r && w && (w.welder_certificates as any[]).length === 0) blocks.push({ titel: `Schweißer ${w.name}: keine Prüfung hinterlegt`, punkte: [] });
-  if (r && q) blocks.push({ titel: `WPS ↔ WPQR ${q.wpqr_no}`, punkte: wpsGegenWpqr(r, q) });
-
+  const { R, W, Q, blocks, gesamt } = await ladeDeckung(sb, sp);
+  const qs = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString();
   return (
     <>
       <h1>Deckungsprüfung</h1>
       <form className="card" method="get">
-        <select name="rev" defaultValue={rev}><option value="">WPS wählen</option>
-          {(revs as any[] | null)?.map((x) => <option key={x.id} value={x.id}>{x.wps?.wps_no} Rev.{x.revision}</option>)}</select>
-        <select name="welder" defaultValue={welder}><option value="">Schweißer wählen</option>
-          {(welders as any[] | null)?.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-        <select name="wpqr" defaultValue={wpqr}><option value="">WPQR wählen</option>
-          {(qs as any[] | null)?.map((x) => <option key={x.id} value={x.id}>{x.wpqr_no}</option>)}</select>
+        <select name="rev" defaultValue={sp.rev}><option value="">WPS wählen</option>
+          {R.map((x) => <option key={x.id} value={x.id}>{x.wps?.wps_no} Rev.{x.revision} ({x.status})</option>)}</select>
+        <select name="welder" defaultValue={sp.welder}><option value="">Schweißer wählen</option>
+          {W.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+        <select name="wpqr" defaultValue={sp.wpqr}><option value="">WPQR wählen</option>
+          {Q.map((x) => <option key={x.id} value={x.id}>{x.wpqr_no}</option>)}</select>
         <button>Prüfen</button>
       </form>
+      {blocks.length > 0 && <p><a href={`/deckung/pdf?${qs}`}>PDF-Nachweis herunterladen</a></p>}
       {blocks.map((b, i) => {
         const g = gesamt(b.punkte);
         return (
