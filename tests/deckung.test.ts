@@ -94,12 +94,38 @@ describe("Deckungsprüfung", () => {
   it("Lagenaufbau ml deckt sl ab -> gedeckt", () => {
     expect(gesamt(schweisserGegenWps({ ...wps, layer_build: "sl" }, { ...cert, layer_build: "ml" }, new Date("2026-11-11")))).toBe("GEDECKT");
   });
+  it("Dicke mit nach oben offenem Prüfungsbereich (ab 12mm) deckt endliche WPS-Obergrenze ab -> gedeckt", () => {
+    expect(gesamt(schweisserGegenWps(wps, { ...cert, thickness_min: 3, thickness_max: null }, new Date("2026-11-11")))).toBe("GEDECKT");
+  });
+  it("Dicke: WPS selbst nach oben offen, Prüfung endlich -> nicht gedeckt", () => {
+    expect(gesamt(schweisserGegenWps({ ...wps, thickness_max: null }, cert, new Date("2026-11-11")))).toBe("NICHT_GEDECKT");
+  });
   it("WPQR bleibt nicht bewertbar ohne validiertes Regelset", () => {
     expect(gesamt(wpsGegenWpqr(wps, { process: "135", material_group: "1.1" }))).toBe("NICHT_BEWERTBAR");
   });
   it("WPQR Verfahren abweichend -> nicht gedeckt", () => {
     expect(gesamt(wpsGegenWpqr(wps, { process: "141", material_group: "1.1" }))).toBe("NICHT_GEDECKT");
   });
+});
+
+import { auftragGegenPruefung } from "../lib/deckung";
+describe("Auftrag gegen Prüfung (konkrete Einzelwerte statt Bereich)", () => {
+  const heute = new Date("2026-11-11");
+  const auftrag = {
+    process: "135", material_group: "1.1", joint_type: "BW", product_type: null,
+    fm_group: null, filler_type: null, weld_detail: null, layer_build: null,
+    thickness: 8, diameter: null, position: "PA",
+  };
+  it("gedeckt", () => expect(gesamt(auftragGegenPruefung(auftrag, cert, heute))).toBe("GEDECKT"));
+  it("Dicke außerhalb der Prüfung -> nicht gedeckt", () => expect(gesamt(auftragGegenPruefung({ ...auftrag, thickness: 25 }, cert, heute))).toBe("NICHT_GEDECKT"));
+  it("Dicke fehlt -> nicht bewertbar", () => expect(gesamt(auftragGegenPruefung({ ...auftrag, thickness: null }, cert, heute))).toBe("NICHT_BEWERTBAR"));
+  it("Position nicht in der Prüfung enthalten -> nicht gedeckt", () => expect(gesamt(auftragGegenPruefung({ ...auftrag, position: "PG" }, cert, heute))).toBe("NICHT_GEDECKT"));
+  it("Durchmesser gefordert, Prüfung nach oben offen deckt ab -> gedeckt", () =>
+    expect(gesamt(auftragGegenPruefung({ ...auftrag, diameter: 1000 }, { ...cert, diameter_min: 25, diameter_max: null }, heute))).toBe("GEDECKT"));
+  it("Durchmesser gefordert, außerhalb des Prüfungsbereichs -> nicht gedeckt", () =>
+    expect(gesamt(auftragGegenPruefung({ ...auftrag, diameter: 10 }, { ...cert, diameter_min: 25, diameter_max: null }, heute))).toBe("NICHT_GEDECKT"));
+  it("andere Werkstoffgruppe als die Prüfung qualifiziert -> nicht gedeckt", () =>
+    expect(gesamt(auftragGegenPruefung({ ...auftrag, material_group: "8.1" }, cert, heute))).toBe("NICHT_GEDECKT"));
 });
 
 import { nahtGegenWpsUndSchweisser } from "../lib/deckung";
