@@ -52,3 +52,28 @@ export function wpsGegenWpqr(wps: WpsRev, q: Wpqr): Pruefpunkt[] {
       regel: "ISO 15614-1 Geltungsbereich: Regelset nicht validiert", status: "NICHT_BEWERTBAR" },
   ];
 }
+
+// Deckungscheck je Naht: konkrete Naht gegen WPS-Revision und Schweißer-Prüfung.
+// Nur direkte Vergleiche (gleiches Verfahren/gleiche Gruppe, Wert innerhalb gespeicherter Bereiche).
+export type Naht = { material_group: string | null; thickness: number | null };
+
+function imBereich(parameter: string, wert: number | null, min: number | null, max: number | null, quelle: string): Pruefpunkt {
+  const soll = wert === null ? "–" : `${wert} mm`;
+  const ist = `${s(min)}–${s(max)} mm`;
+  const regel = `Naht-Wert innerhalb Bereich (${quelle})`;
+  if (wert === null || min === null || max === null) return { parameter, soll, ist, regel, status: "NICHT_BEWERTBAR" };
+  return { parameter, soll, ist, regel, status: wert >= min && wert <= max ? "GEDECKT" : "NICHT_GEDECKT" };
+}
+
+export function nahtGegenWpsUndSchweisser(naht: Naht, wps: WpsRev, cert: Cert, heute = new Date()): Pruefpunkt[] {
+  const regel = "Direkter Vergleich";
+  const gueltig = schweisserGegenWps(wps, cert, heute).find((p) => p.parameter === "Gültigkeit")!;
+  return [
+    eq("Verfahren (WPS ↔ Prüfung)", wps.process, cert.process, regel),
+    eq("Werkstoffgruppe (Naht ↔ WPS)", naht.material_group, wps.material_group, regel),
+    eq("Werkstoffgruppe (Naht ↔ Prüfung)", naht.material_group, cert.material_group, regel),
+    imBereich("Dicke (Naht ↔ WPS)", naht.thickness, wps.thickness_min, wps.thickness_max, "WPS"),
+    imBereich("Dicke (Naht ↔ Prüfung)", naht.thickness, cert.thickness_min, cert.thickness_max, "Prüfbescheinigung"),
+    gueltig,
+  ];
+}

@@ -24,3 +24,13 @@ describe("Deckungsprüfung", () => {
     expect(gesamt(wpsGegenWpqr(wps, { process: "141", material_group: "1.1" }))).toBe("NICHT_GEDECKT");
   });
 });
+
+import { nahtGegenWpsUndSchweisser } from "../lib/deckung";
+describe("Deckungscheck je Naht", () => {
+  const heute = new Date("2026-11-12");
+  const naht = { material_group: "1.1", thickness: 8 };
+  it("gedeckt", () => expect(gesamt(nahtGegenWpsUndSchweisser(naht, wps, cert, heute))).toBe("GEDECKT"));
+  it("Dicke außerhalb WPS", () => expect(gesamt(nahtGegenWpsUndSchweisser({ ...naht, thickness: 14 }, wps, cert, heute))).toBe("NICHT_GEDECKT"));
+  it("Nahtdicke fehlt -> nicht bewertbar", () => expect(gesamt(nahtGegenWpsUndSchweisser({ ...naht, thickness: null }, wps, cert, heute))).toBe("NICHT_BEWERTBAR"));
+  it("andere Werkstoffgruppe", () => expect(gesamt(nahtGegenWpsUndSchweisser({ ...naht, material_group: "8.1" }, wps, cert, heute))).toBe("NICHT_GEDECKT"));
+});

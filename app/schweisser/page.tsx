@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { ctx } from "@/lib/tenant";
+import { FristAmpel } from "@/components/Ampel";
 
 async function neu(fd: FormData) {
   "use server";
@@ -32,7 +33,7 @@ export default async function Page() {
       <table><thead><tr><th>Name</th><th>Stempel</th><th>Prüfungen</th></tr></thead><tbody>
         {(data ?? []).map((w) => (
           <tr key={w.id}><td>{w.name}</td><td>{w.stamp}</td>
-            <td>{(w.welder_certificates as any[]).map((c) => `${c.process} / ${c.material_group ?? "–"} / ${c.thickness_min ?? "–"}–${c.thickness_max ?? "–"} mm / bis ${c.valid_until ?? "–"}`).join("; ")}</td></tr>
+            <td>{(w.welder_certificates as any[]).map((c, i) => <div key={i}>{c.process} / {c.material_group ?? "–"} / {c.thickness_min ?? "–"}–{c.thickness_max ?? "–"} mm · <FristAmpel datum={c.valid_until} /></div>)}</td></tr>
         ))}
       </tbody></table>
     </>

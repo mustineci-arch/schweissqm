@@ -1,71 +1,51 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { ctx } from "@/lib/tenant";
+import { fehlendeAngaben } from "@/lib/wps";
 
 async function neu(fd: FormData) {
   "use server";
   const { sb, tenantId } = await ctx();
   if (!tenantId) return;
-  const { data: w } = await sb.from("wps").insert({ tenant_id: tenantId, wps_no: String(fd.get("no")), title: String(fd.get("title")) || null }).select("id").single();
-  const n = (k: string) => (fd.get(k) ? Number(fd.get(k)) : null);
-  if (w) await sb.from("wps_revisions").insert({
-    tenant_id: tenantId, wps_id: w.id, revision: 0, process: String(fd.get("process")),
-    material_group: String(fd.get("mg")) || null, thickness_min: n("tmin"), thickness_max: n("tmax"),
-  });
-  revalidatePath("/wps");
-}
-
-async function neueRevision(fd: FormData) {
-  "use server";
-  const { sb, tenantId } = await ctx();
-  if (!tenantId) return;
-  const wpsId = String(fd.get("wps_id"));
-  const { data: revs } = await sb.from("wps_revisions").select("*").eq("wps_id", wpsId).order("revision", { ascending: false });
-  const last = revs?.[0];
-  if (!last) return;
-  if (revs!.some((r) => r.status === "entwurf")) redirect("/wps?fehler=" + encodeURIComponent("Es gibt bereits einen Entwurf"));
-  const { id, status, released_by, released_at, created_at, ...rest } = last;
-  const { error } = await sb.from("wps_revisions").insert({ ...rest, revision: last.revision + 1 });
-  if (error) redirect("/wps?fehler=" + encodeURIComponent(error.message));
-  revalidatePath("/wps");
-}
-
-async function freigeben(fd: FormData) {
-  "use server";
-  const { sb } = await ctx();
-  const { error } = await sb.from("wps_revisions").update({ status: "freigegeben" }).eq("id", String(fd.get("id")));
-  if (error) redirect("/wps?fehler=" + encodeURIComponent(error.message));
-  revalidatePath("/wps");
+  const { data: w, error } = await sb.from("wps").insert({ tenant_id: tenantId, wps_no: String(fd.get("no")).trim(), title: String(fd.get("title")).trim() || null }).select("id").single();
+  if (error || !w) redirect("/wps?fehler=" + encodeURIComponent(error?.code === "23505" ? "WPS-Nr existiert schon" : error?.message ?? "Fehler"));
+  const { error: e2 } = await sb.from("wps_revisions").insert({ tenant_id: tenantId, wps_id: w.id, revision: 0, process: String(fd.get("process")).trim(), joint_type: "BW" });
+  if (e2) redirect("/wps?fehler=" + encodeURIComponent(e2.message));
+  redirect(`/wps/${w.id}`);
 }
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ fehler?: string }> }) {
   const { fehler } = await searchParams;
-  const { sb, role } = await ctx();
-  const kannFreigeben = role === "sfi" || role === "admin";
-  const { data } = await sb.from("wps").select("id,wps_no,title,wps_revisions(id,revision,status,process,material_group,thickness_min,thickness_max,released_at)").order("wps_no");
+  const { sb } = await ctx();
+  const { data } = await sb.from("wps").select("id,wps_no,title,wps_revisions(id,revision,status,process,joint_type,material_group,thickness_min,thickness_max,positions,filler,shielding_gas,released_at)").order("wps_no");
+  const rows = ((data ?? []) as any[]).map((w) => {
+    const revs = [...w.wps_revisions].sort((a: any, b: any) => b.revision - a.revision);
+    const cur = revs[0];
+    return { w, cur, fehlt: cur && cur.status === "entwurf" ? fehlendeAngaben(cur).length : 0 };
+  }).filter((x) => x.cur);
+  const frei = rows.filter((x) => x.cur.status === "freigegeben").length;
+  const entw = rows.filter((x) => x.cur.status === "entwurf").length;
+  const offen = rows.reduce((s, x) => s + x.fehlt, 0);
   return (
     <>
       <h1>WPS</h1>
+      <div className="zustand">
+        <span className="chip"><b>{frei}</b>freigegeben</span><span className="chip"><b>{entw}</b>Entwürfe</span><span className="chip"><b>{offen}</b>offene Pflichtangaben</span>
+      </div>
       {fehler && <p className="err">{fehler}</p>}
       <form className="card" action={neu}>
-        <input name="no" placeholder="WPS-Nr" required /><input name="title" placeholder="Titel" />
-        <input name="process" placeholder="Verfahren" required /><input name="mg" placeholder="Werkstoffgruppe" />
-        <input name="tmin" type="number" step="0.1" placeholder="Dicke min" /><input name="tmax" type="number" step="0.1" placeholder="Dicke max" />
-        <button>Anlegen (Rev. 0, Entwurf)</button>
+        <input name="no" placeholder="WPS-Nr" required /><input name="title" placeholder="Titel (optional)" />
+        <input name="process" placeholder="Verfahren (z. B. 135)" required />
+        <button>WPS anlegen</button>
       </form>
-      <table><thead><tr><th>WPS-Nr</th><th>Titel</th><th>Rev.</th><th>Status</th><th>Verfahren</th><th>Werkstoff</th><th>Dicke</th><th>Aktion</th></tr></thead><tbody>
-        {(data ?? []).flatMap((w) => {
-          const revs = [...(w.wps_revisions as any[])].sort((a, b) => b.revision - a.revision);
-          return revs.map((r, i) => (
-            <tr key={r.id}><td>{w.wps_no}</td><td>{w.title}</td><td>{r.revision}</td><td>{r.status}{r.released_at ? ` (${r.released_at.slice(0, 10)})` : ""}</td>
-              <td>{r.process}</td><td>{r.material_group}</td><td>{r.thickness_min ?? "–"}–{r.thickness_max ?? "–"}</td>
-              <td>
-                {r.status === "entwurf" && kannFreigeben && <form action={freigeben}><input type="hidden" name="id" value={r.id} /><button>Freigeben</button></form>}
-                {r.status === "entwurf" && !kannFreigeben && "wartet auf SFI"}
-                {i === 0 && r.status !== "entwurf" && <form action={neueRevision}><input type="hidden" name="wps_id" value={w.id} /><button>Neue Revision</button></form>}
-              </td></tr>
-          ));
-        })}
+      <table><thead><tr><th>WPS-Nr</th><th>Verfahren</th><th>Naht</th><th>Werkstoff</th><th>Dicke</th><th>Positionen</th><th>Zustand</th><th>Aktion</th></tr></thead><tbody>
+        {rows.map(({ w, cur, fehlt }) => (
+          <tr key={w.id}><td><b>{w.wps_no}</b><div className="sub" style={{ margin: 0 }}>{w.title}</div></td><td>{cur.process}</td><td>{cur.joint_type ?? "–"}</td><td>{cur.material_group ?? "–"}</td>
+            <td>{cur.thickness_min ?? "–"}–{cur.thickness_max ?? "–"}</td><td>{(cur.positions ?? []).join(", ") || "–"}</td>
+            <td><span className={`status ${cur.status}`}>{cur.status}</span>{cur.status === "entwurf" && fehlt > 0 && <div className="herkunft">{fehlt} Pflichtangabe(n) fehlen</div>}</td>
+            <td>{cur.status === "freigegeben" ? <Link className="btn sek" href={`/wps/${w.id}`}>Ausgabe Rev. {cur.revision}</Link> : <Link className="btn" href={`/wps/${w.id}`}>{cur.status === "entwurf" ? "Bearbeiten" : "Öffnen"}</Link>}</td></tr>
+        ))}
+        {rows.length === 0 && <tr><td colSpan={8}>Noch keine WPS.</td></tr>}
       </tbody></table>
     </>
   );
