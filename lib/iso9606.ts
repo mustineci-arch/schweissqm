@@ -1,9 +1,10 @@
 // Normrechner DIN EN ISO 9606-1: berechnet aus der rohen Prüfbezeichnung (Produktform,
-// Nahtart, Prüfstück-Dicke/-Durchmesser, Prüfposition) den gültigen Geltungsbereich.
+// Nahtart, Prüfstück-Dicke/-Durchmesser, Prüfposition) den gültigen Geltungsbereich, und
+// stellt die Qualifikationsmatrizen für Verfahren und Werkstoffgruppen bereit.
 // Portiert und 1:1 übernommen aus der bereits fachlich genutzten App
-// https://iso9606-audit-engine.vercel.app/ (iso9606.html) – dort als Normrechner im Einsatz.
-// Nur hier wird die Norm interpretiert; deckung.ts vergleicht danach nur noch direkt
-// (gespeicherte Bereiche/Mengen), siehe Kommentar dort.
+// https://iso9606-audit-engine.vercel.app/ (iso9606.html) – dort als Normrechner/Audit-Engine im Einsatz.
+// Die Norm wird nur hier interpretiert; deckung.ts nutzt diese Funktionen als fertige
+// Entscheidungsregeln und vergleicht sonst nur noch direkt (gespeicherte Bereiche/Mengen).
 
 export type Produktform = "P" | "T";
 export type Nahtart = "BW" | "FW";
@@ -74,4 +75,101 @@ export function positionScope(e: PositionEingabe): string[] {
   const matrix = e.nahtart === "FW" ? POSITION_MATRIX_FW : POSITION_MATRIX_BW;
   const basis = matrix[e.position] ?? [];
   return [...new Set([...basis, ...positionsErweiterung(e)])];
+}
+
+// Abschnitt 5.2: Verfahren-Äquivalenzen bei der Prüfung (geprüftes Verfahren qualifiziert auch das
+// gleichwertige Partnerverfahren). Kurzschluss-Übergang (Transfer "D") bei 131/135/138 ist hier NICHT
+// abgebildet, weil schweissqm die Übergangsart der Prüfung aktuell nicht erfasst.
+const PROZESS_AEQUIVALENZ: Record<string, string[]> = {
+  "135": ["135", "138"], "138": ["135", "138"],
+  "121": ["121", "125"], "125": ["121", "125"],
+  "141": ["141", "143", "145"], "143": ["141", "143", "145"], "145": ["141", "143", "145"],
+  "142": ["142"],
+};
+export function verfahrenGedeckt(testProzess: string, jobProzess: string): boolean {
+  return (PROZESS_AEQUIVALENZ[testProzess] ?? [testProzess]).includes(jobProzess);
+}
+
+// Werkstoffgruppen-Qualifikationsmatrix nach CEN ISO/TR 15608 (Abschnitt 5.5): eine Prüfung in
+// Gruppe X qualifiziert oft auch andere, "leichtere" Gruppen – kein reiner Gleichheitsvergleich.
+export const WERKSTOFFGRUPPEN_QUALIFIKATION: Record<string, string[]> = {
+  "1.1": ["1.1"],
+  "1.2": ["1.1", "1.2"],
+  "1.3": ["1.1", "1.2", "1.3", "2.1"],
+  "1.4": ["1.1", "1.2", "1.4"],
+  "2.1": ["1.1", "1.2", "1.3", "2.1"],
+  "2.2": ["1.2", "1.3", "2.1", "2.2"],
+  "3.1": ["1.2", "1.3", "2.1", "2.2", "3.1"],
+  "3.2": ["2.2", "3.1", "3.2"],
+  "7.1": ["7.1"],
+  "8.1 ohne Mo": ["8.1 ohne Mo"],
+  "8.1": ["8.1"],
+  "11": ["11"],
+  "21": ["21"],
+  "22.2": ["22.2", "22.3", "22.4"],
+  "22.3": ["22.3"],
+  "22.4": ["22.2", "22.3", "22.4"],
+  "23.1": ["23.1", "23.2"],
+  "23.2": ["23.1", "23.2"],
+  "24.1": ["24.1", "24.2"],
+  "24.2": ["24.1", "24.2"],
+  "71": ["71"],
+  "72": ["72"],
+  "73": ["73"],
+};
+export function werkstoffgruppeGedeckt(testGruppe: string, jobGruppe: string): boolean {
+  return (WERKSTOFFGRUPPEN_QUALIFIKATION[testGruppe] ?? [testGruppe]).includes(jobGruppe);
+}
+
+// Abschnitt 5.3: Produktform (Blech P / Rohr T). Rohrprüfung mit D > 25 mm qualifiziert auch
+// Blech. Eine Blechprüfung qualifiziert ein Rohr nur bei fest eingespanntem Rohr D ≥ 500 mm
+// oder rotierendem Rohr D ≥ 75 mm in den Positionen PA/PB/PC/PD.
+export type ProduktformEingabe = {
+  testProdukt: Produktform; jobProdukt: Produktform; testDurchmesser: number | null;
+  jobDurchmesser: number | null; jobPositionen: string[] | null; festRohr: boolean; rotierendRohr: boolean;
+};
+export function produktformGedeckt(e: ProduktformEingabe): boolean {
+  if (e.testProdukt === e.jobProdukt) return true;
+  if (e.testProdukt === "T" && e.jobProdukt === "P") return (e.testDurchmesser ?? 0) > 25;
+  if (e.testProdukt === "P" && e.jobProdukt === "T") {
+    if (e.festRohr && (e.jobDurchmesser ?? 0) >= 500) return true;
+    if (e.rotierendRohr && (e.jobDurchmesser ?? 0) >= 75 && (e.jobPositionen ?? []).every((p) => ["PA", "PB", "PC", "PD"].includes(p))) return true;
+    return false;
+  }
+  return false;
+}
+
+// Tabelle 2/3: FM-Gruppe des Zusatzwerkstoffs (geprüfte Gruppe qualifiziert "leichtere" Gruppen).
+const FM_SCOPE: Record<string, string[]> = {
+  FM1: ["FM1", "FM2"], FM2: ["FM1", "FM2"], FM3: ["FM1", "FM2", "FM3"],
+  FM4: ["FM1", "FM2", "FM3", "FM4"], FM5: ["FM5"], FM6: ["FM5", "FM6"],
+};
+export function fmGruppeGedeckt(testFm: string, jobFm: string): boolean {
+  return (FM_SCOPE[testFm] ?? [testFm]).includes(jobFm);
+}
+
+// Tabelle 5: Schweißzusatzart (Massivdraht/Stab S, Metallpulver M, Fülldrahtgruppen B/R/PZ/V/W/Y/Z, Zellulose C).
+const ZUSATZART_SCOPE: Record<string, string[]> = {
+  S: ["S", "M"], M: ["S", "M"],
+  B: ["B", "R", "PZ", "V", "W", "Y", "Z"], R: ["R", "PZ", "V", "W", "Y", "Z"], PZ: ["R", "PZ", "V", "W", "Y", "Z"],
+  V: ["R", "PZ", "V", "W", "Y", "Z"], W: ["R", "PZ", "V", "W", "Y", "Z"], Y: ["R", "PZ", "V", "W", "Y", "Z"], Z: ["R", "PZ", "V", "W", "Y", "Z"],
+  C: ["C"],
+};
+export function zusatzartGedeckt(testZusatzart: string, jobZusatzart: string): boolean {
+  return (ZUSATZART_SCOPE[testZusatzart] ?? [testZusatzart]).includes(jobZusatzart);
+}
+
+// Tabelle 11: Schweißdetail (ss_nb einseitig ohne Badsicherung, ss_mb mit Badsicherung, bs beidseitig, ...).
+const DETAIL_SCOPE: Record<string, string[]> = {
+  ss_nb: ["ss_nb", "ss_mb", "bs", "ss_gb", "ss_fb"], ss_mb: ["ss_mb", "bs"], bs: ["ss_mb", "bs"],
+  ss_gb: ["ss_mb", "bs", "ss_gb"], ci: ["ss_mb", "bs", "ci"], ss_fb: ["ss_mb", "bs", "ss_fb"],
+};
+export function schweissdetailGedeckt(testDetail: string, jobDetail: string): boolean {
+  return (DETAIL_SCOPE[testDetail] ?? [testDetail]).includes(jobDetail);
+}
+
+// Tabelle 12: Lagenaufbau (mehrlagig sl qualifiziert auch mehrlagig ml nicht automatisch umgekehrt).
+const LAGENAUFBAU_SCOPE: Record<string, string[]> = { sl: ["sl"], ml: ["sl", "ml"] };
+export function lagenaufbauGedeckt(testLage: string, jobLage: string): boolean {
+  return (LAGENAUFBAU_SCOPE[testLage] ?? [testLage]).includes(jobLage);
 }
