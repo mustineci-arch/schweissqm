@@ -12,8 +12,8 @@ export function gesamt(punkte: Pruefpunkt[]): Status {
   return "GEDECKT";
 }
 
-export type WpsRev = { process: string; material_group: string | null; thickness_min: number | null; thickness_max: number | null; diameter_min: number | null };
-export type Cert = { process: string; material_group: string | null; thickness_min: number | null; thickness_max: number | null; diameter_min: number | null; valid_until: string | null };
+export type WpsRev = { process: string; material_group: string | null; thickness_min: number | null; thickness_max: number | null; diameter_min: number | null; positions: string[] | null };
+export type Cert = { process: string; material_group: string | null; thickness_min: number | null; thickness_max: number | null; diameter_min: number | null; diameter_max: number | null; positions: string[] | null; valid_until: string | null };
 export type Wpqr = { process: string; material_group: string | null };
 
 function eq(parameter: string, soll: string | null, ist: string | null, regel: string): Pruefpunkt {
@@ -29,6 +29,27 @@ function bereich(parameter: string, wmin: number | null, wmax: number | null, cm
   return { parameter, soll, ist, regel, status: cmin <= wmin && cmax >= wmax ? "GEDECKT" : "NICHT_GEDECKT" };
 }
 
+// Positionen: WPS verlangt eine Menge an Positionen, die Prüfbescheinigung muss sie alle abdecken
+// (Menge aus iso9606.ts beim Erfassen der Prüfung berechnet, hier nur Mengenvergleich).
+function positionen(wps: string[] | null, cert: string[] | null): Pruefpunkt {
+  const regel = "Menge der WPS-Positionen muss in den qualifizierten Positionen der Prüfung enthalten sein";
+  const soll = wps && wps.length ? wps.join(", ") : "–";
+  const ist = cert && cert.length ? cert.join(", ") : "–";
+  if (!wps || wps.length === 0 || !cert || cert.length === 0) return { parameter: "Position", soll, ist, regel, status: "NICHT_BEWERTBAR" };
+  return { parameter: "Position", soll, ist, regel, status: wps.every((p) => cert.includes(p)) ? "GEDECKT" : "NICHT_GEDECKT" };
+}
+
+// Durchmesser: WPS speichert nur eine Mindestgröße (diameter_min), die Prüfung einen Bereich
+// (diameter_min/diameter_max, max = null bedeutet nach oben offen, Tabelle 7 Fall D > 25).
+function durchmesser(wpsMin: number | null, certMin: number | null, certMax: number | null): Pruefpunkt {
+  const regel = "Rohrdurchmesser der WPS muss im qualifizierten Bereich der Prüfung liegen";
+  const soll = wpsMin === null ? "–" : `≥ ${wpsMin} mm`;
+  const ist = certMin === null ? "–" : `${certMin}–${certMax === null ? "∞" : certMax} mm`;
+  if (wpsMin === null || certMin === null) return { parameter: "Durchmesser", soll, ist, regel, status: "NICHT_BEWERTBAR" };
+  const gedeckt = certMin <= wpsMin && (certMax === null || certMax >= wpsMin);
+  return { parameter: "Durchmesser", soll, ist, regel, status: gedeckt ? "GEDECKT" : "NICHT_GEDECKT" };
+}
+
 export function schweisserGegenWps(wps: WpsRev, cert: Cert, heute = new Date()): Pruefpunkt[] {
   const regel = "Direkter Vergleich mit Bereich der Prüfbescheinigung";
   let gueltig: Pruefpunkt;
@@ -39,6 +60,9 @@ export function schweisserGegenWps(wps: WpsRev, cert: Cert, heute = new Date()):
     eq("Verfahren", wps.process, cert.process, regel),
     eq("Werkstoffgruppe", wps.material_group, cert.material_group, regel),
     bereich("Blechdicke", wps.thickness_min, wps.thickness_max, cert.thickness_min, cert.thickness_max, regel),
+    positionen(wps.positions, cert.positions),
+    // Durchmesser nur relevant, wenn die WPS überhaupt einen Rohrdurchmesser fordert (sonst Blech-WPS).
+    ...(wps.diameter_min !== null ? [durchmesser(wps.diameter_min, cert.diameter_min, cert.diameter_max)] : []),
     gueltig,
   ];
 }

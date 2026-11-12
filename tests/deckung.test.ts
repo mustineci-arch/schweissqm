@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { schweisserGegenWps, wpsGegenWpqr, gesamt } from "../lib/deckung";
 
-const wps = { process: "135", material_group: "1.1", thickness_min: 5, thickness_max: 12, diameter_min: null };
-const cert = { process: "135", material_group: "1.1", thickness_min: 3, thickness_max: 20, diameter_min: null, valid_until: "2027-01-01" };
+const wps = { process: "135", material_group: "1.1", thickness_min: 5, thickness_max: 12, diameter_min: null, positions: ["PA", "PC"] };
+const cert = { process: "135", material_group: "1.1", thickness_min: 3, thickness_max: 20, diameter_min: null, diameter_max: null, positions: ["PA", "PC", "PF"], valid_until: "2027-01-01" };
 
 describe("Deckungsprüfung", () => {
   it("Schweißer gedeckt", () => {
@@ -16,6 +16,18 @@ describe("Deckungsprüfung", () => {
   });
   it("fehlende Daten -> nicht bewertbar", () => {
     expect(gesamt(schweisserGegenWps(wps, { ...cert, thickness_min: null }, new Date("2026-11-11")))).toBe("NICHT_BEWERTBAR");
+  });
+  it("Position fehlt bei WPS -> nicht bewertbar", () => {
+    expect(gesamt(schweisserGegenWps({ ...wps, positions: null }, cert, new Date("2026-11-11")))).toBe("NICHT_BEWERTBAR");
+  });
+  it("Position nicht abgedeckt -> nicht gedeckt", () => {
+    expect(gesamt(schweisserGegenWps({ ...wps, positions: ["PA", "PG"] }, cert, new Date("2026-11-11")))).toBe("NICHT_GEDECKT");
+  });
+  it("Durchmesser außerhalb -> nicht gedeckt", () => {
+    expect(gesamt(schweisserGegenWps({ ...wps, diameter_min: 100 }, { ...cert, diameter_min: 20, diameter_max: 40 }, new Date("2026-11-11")))).toBe("NICHT_GEDECKT");
+  });
+  it("Durchmesser ohne Obergrenze deckt alles ab diameter_min -> gedeckt", () => {
+    expect(gesamt(schweisserGegenWps({ ...wps, diameter_min: 500 }, { ...cert, diameter_min: 25, diameter_max: null }, new Date("2026-11-11")))).toBe("GEDECKT");
   });
   it("WPQR bleibt nicht bewertbar ohne validiertes Regelset", () => {
     expect(gesamt(wpsGegenWpqr(wps, { process: "135", material_group: "1.1" }))).toBe("NICHT_BEWERTBAR");

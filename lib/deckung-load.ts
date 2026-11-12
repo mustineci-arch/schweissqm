@@ -5,8 +5,8 @@ export type Block = { titel: string; punkte: Pruefpunkt[] };
 
 export async function ladeDeckung(sb: SupabaseClient, p: { rev?: string; welder?: string; wpqr?: string }) {
   const [{ data: revs }, { data: welders }, { data: qs }] = await Promise.all([
-    sb.from("wps_revisions").select("id,revision,status,process,material_group,thickness_min,thickness_max,diameter_min,wps(wps_no)").order("created_at"),
-    sb.from("welders").select("id,name,welder_certificates(process,material_group,thickness_min,thickness_max,diameter_min,valid_until)").order("name"),
+    sb.from("wps_revisions").select("id,revision,status,process,material_group,thickness_min,thickness_max,diameter_min,positions,wps(wps_no)").order("created_at"),
+    sb.from("welders").select("id,name,welder_certificates(process,material_group,thickness_min,thickness_max,diameter_min,diameter_max,positions,valid_until)").order("name"),
     sb.from("wpqr").select("id,wpqr_no,process,material_group").order("wpqr_no"),
   ]);
   const R = (revs ?? []) as any[]; const W = (welders ?? []) as any[]; const Q = (qs ?? []) as any[];

@@ -6,8 +6,8 @@ import { gesamt, nahtGegenWpsUndSchweisser, type Pruefpunkt } from "@/lib/deckun
 export async function pruefeZuordnung(sb: SupabaseClient, weldId: string, revId: string, welderId: string): Promise<{ ok: boolean; gruende: string[] }> {
   const [{ data: weld }, { data: rev }, { data: welder }] = await Promise.all([
     sb.from("welds").select("material_group,thickness").eq("id", weldId).maybeSingle(),
-    sb.from("wps_revisions").select("status,revision,process,material_group,thickness_min,thickness_max,diameter_min,wps(wps_no)").eq("id", revId).maybeSingle(),
-    sb.from("welders").select("name,welder_certificates(process,material_group,thickness_min,thickness_max,diameter_min,valid_until)").eq("id", welderId).maybeSingle(),
+    sb.from("wps_revisions").select("status,revision,process,material_group,thickness_min,thickness_max,diameter_min,positions,wps(wps_no)").eq("id", revId).maybeSingle(),
+    sb.from("welders").select("name,welder_certificates(process,material_group,thickness_min,thickness_max,diameter_min,diameter_max,positions,valid_until)").eq("id", welderId).maybeSingle(),
   ]);
   if (!weld || !rev || !welder) return { ok: false, gruende: ["Naht, WPS oder Schweißer nicht gefunden"] };
   const r = rev as any; const w = welder as any;

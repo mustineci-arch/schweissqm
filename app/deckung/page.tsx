@@ -32,7 +32,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
           </section>
         );
       })}
-      <p style={{ marginTop: 16 }}>Hinweis: Geltungsbereiche nach Norm (z. B. ISO 15614-1) sind noch nicht als validiertes Regelset hinterlegt und bleiben NICHT_BEWERTBAR. Keine Freigabe ohne Prüfung durch die Schweißaufsicht.</p>
+      <p style={{ marginTop: 16 }}>Hinweis: Position und Durchmesser werden gegen die beim Schweißer hinterlegte Prüfung verglichen (Geltungsbereich nach DIN EN ISO 9606-1, siehe Normrechner auf der Schweißer-Seite). Der WPS-gegen-WPQR-Vergleich (z. B. ISO 15614-1) ist noch nicht als validiertes Regelset hinterlegt und bleibt NICHT_BEWERTBAR. Keine Freigabe ohne Prüfung durch die Schweißaufsicht.</p>
     </>
   );
 }
