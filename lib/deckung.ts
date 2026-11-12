@@ -40,12 +40,13 @@ function qualifiziert(parameter: string, soll: string | null, ist: string | null
   return { parameter, soll, ist, regel, status: deckt(ist, soll) ? "GEDECKT" : "NICHT_GEDECKT" };
 }
 
+// wmax/cmax === null heißt nach oben offen (z. B. Dicke ab 12 mm), nicht "fehlend".
 function bereich(parameter: string, wmin: number | null, wmax: number | null, cmin: number | null, cmax: number | null, regel: string): Pruefpunkt {
-  const soll = `${s(wmin)}–${s(wmax)} mm`;
-  const ist = `${s(cmin)}–${s(cmax)} mm`;
-  if (wmin === null || wmax === null || cmin === null || cmax === null)
-    return { parameter, soll, ist, regel, status: "NICHT_BEWERTBAR" };
-  return { parameter, soll, ist, regel, status: cmin <= wmin && cmax >= wmax ? "GEDECKT" : "NICHT_GEDECKT" };
+  const soll = wmin === null ? "–" : `${wmin}–${wmax === null ? "∞" : wmax} mm`;
+  const ist = cmin === null ? "–" : `${cmin}–${cmax === null ? "∞" : cmax} mm`;
+  if (wmin === null || cmin === null) return { parameter, soll, ist, regel, status: "NICHT_BEWERTBAR" };
+  const gedeckt = cmin <= wmin && (cmax === null || (wmax !== null && cmax >= wmax));
+  return { parameter, soll, ist, regel, status: gedeckt ? "GEDECKT" : "NICHT_GEDECKT" };
 }
 
 // Positionen: WPS verlangt eine Menge an Positionen, die Prüfbescheinigung muss sie alle abdecken
@@ -141,12 +142,62 @@ export function wpsGegenWpqr(wps: WpsRev, q: Wpqr): Pruefpunkt[] {
 // Nur direkte Vergleiche (gleiches Verfahren/gleiche Gruppe, Wert innerhalb gespeicherter Bereiche).
 export type Naht = { material_group: string | null; thickness: number | null };
 
+// max === null heißt nach oben offen (z. B. Dicke ab 12 mm oder Durchmesser Tabelle 7 Fall D > 25),
+// NICHT "fehlend" – nur min === null bzw. wert === null ist tatsächlich fehlende Angabe.
 function imBereich(parameter: string, wert: number | null, min: number | null, max: number | null, quelle: string): Pruefpunkt {
   const soll = wert === null ? "–" : `${wert} mm`;
-  const ist = `${s(min)}–${s(max)} mm`;
-  const regel = `Naht-Wert innerhalb Bereich (${quelle})`;
-  if (wert === null || min === null || max === null) return { parameter, soll, ist, regel, status: "NICHT_BEWERTBAR" };
-  return { parameter, soll, ist, regel, status: wert >= min && wert <= max ? "GEDECKT" : "NICHT_GEDECKT" };
+  const ist = min === null ? "–" : `${min}–${max === null ? "∞" : max} mm`;
+  const regel = `Wert innerhalb Bereich (${quelle})`;
+  if (wert === null || min === null) return { parameter, soll, ist, regel, status: "NICHT_BEWERTBAR" };
+  const gedeckt = wert >= min && (max === null || wert <= max);
+  return { parameter, soll, ist, regel, status: gedeckt ? "GEDECKT" : "NICHT_GEDECKT" };
+}
+
+// Position: ein einzelner Auftragswert muss in den qualifizierten Positionen der Prüfung enthalten sein.
+function positionEinzeln(soll: string | null, cert: string[] | null): Pruefpunkt {
+  const regel = "Auftragsposition muss in den qualifizierten Positionen der Prüfung enthalten sein";
+  const sollText = s(soll), ist = cert && cert.length ? cert.join(", ") : "–";
+  if (!soll || !cert || cert.length === 0) return { parameter: "Position", soll: sollText, ist, regel, status: "NICHT_BEWERTBAR" };
+  return { parameter: "Position", soll: sollText, ist, regel, status: cert.includes(soll) ? "GEDECKT" : "NICHT_GEDECKT" };
+}
+
+// Auftrag: konkrete Einzelwerte (z. B. "diese eine Rohrdicke, dieser eine Durchmesser, diese eine
+// Position"), nicht Bereiche wie bei der WPS. Wird direkt gegen den berechneten Geltungsbereich der
+// Schweißerprüfung geprüft – entspricht dem Audit-Tab der Referenz-App (Auftrag ↔ Prüfung).
+export type Auftrag = {
+  process: string; material_group: string | null; joint_type: string | null; product_type: string | null;
+  fm_group: string | null; filler_type: string | null; weld_detail: string | null; layer_build: string | null;
+  thickness: number | null; diameter: number | null; position: string | null;
+};
+
+export function auftragGegenPruefung(auftrag: Auftrag, cert: Cert, heute = new Date()): Pruefpunkt[] {
+  let gueltig: Pruefpunkt;
+  const regel = "Direkter Vergleich";
+  if (!cert.valid_until) gueltig = { parameter: "Gültigkeit", soll: "≥ heute", ist: "–", regel, status: "NICHT_BEWERTBAR" };
+  else gueltig = { parameter: "Gültigkeit", soll: "≥ heute", ist: cert.valid_until, regel,
+    status: new Date(cert.valid_until + "T23:59:59") >= heute ? "GEDECKT" : "NICHT_GEDECKT" };
+  return [
+    qualifiziert("Verfahren", auftrag.process, cert.process, verfahrenGedeckt, "DIN EN ISO 9606-1 Abschnitt 5.2 (Verfahrens-Äquivalenzen)"),
+    qualifiziert("Werkstoffgruppe", auftrag.material_group, cert.material_group, werkstoffgruppeGedeckt, "CEN ISO/TR 15608 Werkstoffgruppen-Qualifikation"),
+    nahtart(auftrag.joint_type, cert),
+    imBereich("Dicke (Blech oder Rohrwand)", auftrag.thickness, cert.thickness_min, cert.thickness_max, "Prüfbescheinigung"),
+    positionEinzeln(auftrag.position, cert.positions),
+    // Die folgenden Kriterien sind optional: nur geprüft, wenn der Auftrag sie überhaupt fordert.
+    ...(auftrag.product_type !== null ? [{
+      parameter: "Produktform", soll: s(auftrag.product_type), ist: s(cert.product_type), regel: "DIN EN ISO 9606-1 Abschnitt 5.3",
+      status: (!cert.product_type ? "NICHT_BEWERTBAR" : produktformGedeckt({
+        testProdukt: cert.product_type as "P" | "T", jobProdukt: auftrag.product_type as "P" | "T",
+        testDurchmesser: cert.test_diameter, jobDurchmesser: auftrag.diameter, jobPositionen: auftrag.position ? [auftrag.position] : null,
+        festRohr: cert.fixed_pipe, rotierendRohr: cert.rotating_pipe,
+      }) ? "GEDECKT" : "NICHT_GEDECKT") as Status,
+    }] : []),
+    ...(auftrag.diameter !== null ? [imBereich("Durchmesser", auftrag.diameter, cert.diameter_min, cert.diameter_max, "Prüfbescheinigung")] : []),
+    ...(auftrag.fm_group !== null ? [qualifiziert("FM-Gruppe", auftrag.fm_group, cert.fm_group, fmGruppeGedeckt, "DIN EN ISO 9606-1 Tabelle 2/3")] : []),
+    ...(auftrag.filler_type !== null ? [qualifiziert("Schweißzusatzart", auftrag.filler_type, cert.filler_type, zusatzartGedeckt, "DIN EN ISO 9606-1 Tabelle 5")] : []),
+    ...(auftrag.weld_detail !== null ? [qualifiziert("Schweißdetail", auftrag.weld_detail, cert.weld_detail, schweissdetailGedeckt, "DIN EN ISO 9606-1 Tabelle 11")] : []),
+    ...(auftrag.layer_build !== null ? [qualifiziert("Lagenaufbau", auftrag.layer_build, cert.layer_build, lagenaufbauGedeckt, "DIN EN ISO 9606-1 Tabelle 12")] : []),
+    gueltig,
+  ];
 }
 
 // Enthält ALLE Kriterien aus schweisserGegenWps (Verfahren, Werkstoffgruppe, Produktform, Nahtart,
