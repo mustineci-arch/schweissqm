@@ -87,6 +87,35 @@ async function extractWordsFromPage(page: any): Promise<Wort[]> {
   return words;
 }
 
+// Ein einziger Tesseract-Worker für die gesamte Sitzung (Erststart lädt WASM-Core + Sprachdaten
+// von einer CDN und dauert ein paar Sekunden, danach ist er für weitere Seiten/Dateien bereit).
+let ocrWorkerPromise: ReturnType<typeof ladeOcrWorker> | null = null;
+async function ladeOcrWorker() {
+  const { createWorker } = await import("tesseract.js");
+  return createWorker("deu");
+}
+async function holeOcrWorker() {
+  if (!ocrWorkerPromise) ocrWorkerPromise = ladeOcrWorker();
+  return ocrWorkerPromise;
+}
+
+// Rendert eine PDF-Seite in erhöhter Auflösung auf ein <canvas> (bessere OCR-Erkennung als bei
+// Bildschirmauflösung) und lässt Tesseract den reinen Text erkennen. Liefert nur Fließtext ohne
+// Wortpositionen – Tabellen-/Positionsbasierte Felder (TÜV-NORD-Format) bleiben daher leer;
+// zuFormular() fängt die wichtigsten davon über einen Bezeichnung-Fallback auf.
+async function ocrSeite(page: any): Promise<string> {
+  const viewport = page.getViewport({ scale: 2.5 });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas nicht verfügbar");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const worker = await holeOcrWorker();
+  const { data } = await worker.recognize(canvas);
+  return data.text;
+}
+
 export async function extrahiereZertifikate(file: File): Promise<Zertifikat[]> {
   const pdfjsLib = await import("pdfjs-dist");
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
@@ -98,10 +127,18 @@ export async function extrahiereZertifikate(file: File): Promise<Zertifikat[]> {
     const words = await extractWordsFromPage(page);
     const text = wordsToText(words);
     if (isScanned(words, text)) {
-      records.push({
-        _datei: file.name, _seite: pageNum, _pages: doc.numPages, _ocr_used: false,
-        _error: "Seite wirkt gescannt (kein Textlayer) – OCR wird aktuell nicht unterstützt, bitte Werte manuell eintragen.",
-      } as Zertifikat);
+      try {
+        const ocrText = await ocrSeite(page);
+        const rec = auswerten([], ocrText, file.name, pageNum, doc.numPages);
+        rec._ocr_used = true;
+        if (!rec.bezeichnung && !rec.name) rec._error = "OCR konnte keine verwertbaren Felder erkennen – bitte Werte manuell eintragen/prüfen.";
+        records.push(rec);
+      } catch (err) {
+        records.push({
+          _datei: file.name, _seite: pageNum, _pages: doc.numPages, _ocr_used: false,
+          _error: "OCR fehlgeschlagen: " + (err instanceof Error ? err.message : String(err)),
+        } as Zertifikat);
+      }
       continue;
     }
     records.push(auswerten(words, text, file.name, pageNum, doc.numPages));

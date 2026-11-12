@@ -43,7 +43,9 @@ export function ZertifikatUpload({ formSelector = "form.card" }: { formSelector?
     setLaedt(true); setFehler(null); setRecords([]);
     try {
       const recs = await extrahiereZertifikate(file);
-      if (recs.length === 1) {
+      // Bei OCR-Ergebnissen immer erst zur Prüfung anzeigen statt automatisch zu übernehmen,
+      // da die Erkennung bei gescannten Seiten unsicherer ist.
+      if (recs.length === 1 && !recs[0]._ocr_used) {
         uebernehmen(recs[0]);
       } else {
         setRecords(recs);
@@ -64,17 +66,18 @@ export function ZertifikatUpload({ formSelector = "form.card" }: { formSelector?
 
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <label className="f">Zertifikat-PDF einlesen (TÜV NORD, TÜV Thüringen, DVS – nur Textlayer, keine Scans)
+      <label className="f">Zertifikat-PDF einlesen (TÜV NORD, TÜV Thüringen, DVS – auch Scans per OCR)
         <input type="file" accept="application/pdf" onChange={onFile} disabled={laedt} />
       </label>
-      {laedt && <p className="sub">Lese PDF …</p>}
+      {laedt && <p className="sub">Lese PDF … (bei Scans kann OCR etwas länger dauern)</p>}
       {fehler && <p className="err">{fehler}</p>}
-      {records.length > 1 && (
+      {records.length > 0 && (
         <div>
-          <p className="sub">{records.length} Seiten gefunden – welche übernehmen?</p>
+          <p className="sub">{records.length} Seite(n) gefunden – welche übernehmen?</p>
           {records.map((d, i) => (
             <div key={i} className="card" style={{ margin: "6px 0" }}>
               <b>Seite {d._seite}/{d._pages}</b>{d.name ? ` · ${d.name}` : ""}{d.bezeichnung ? ` · ${d.bezeichnung}` : ""}
+              {d._ocr_used && <div className="sub" style={{ color: "#7a5a00" }}>⚠ per OCR gelesen (gescannte Seite) – Werte bitte sorgfältig prüfen</div>}
               {d._error && <div className="err">{d._error}</div>}
               {!d._error && <button type="button" className="sek" onClick={() => uebernehmen(d)}>Übernehmen</button>}
             </div>

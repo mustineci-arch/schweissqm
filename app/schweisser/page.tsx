@@ -123,8 +123,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
       </tbody></table>
 
       <h2>Neuen Schweißer anlegen</h2>
-      <ZertifikatUpload />
-      <form className="card" action={neu}>
+      <ZertifikatUpload formSelector="form.zert-neu" />
+      <form className="card zert-neu" action={neu}>
         <input name="name" placeholder="Name" required /><input name="stamp" placeholder="Stempel (Zeichen)" />
         <input name="birthdate" type="date" title="Geburtsdatum" />
         <input name="process" placeholder="Verfahren (z. B. 135)" /><input name="mg" placeholder="Werkstoffgruppe" />
