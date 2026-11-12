@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { ctx } from "@/lib/tenant";
 import { FristAmpel } from "@/components/Ampel";
+import { ZertifikatUpload } from "@/components/ZertifikatUpload";
 import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, pruefbezeichnung, type Nahtart, type Produktform } from "@/lib/iso9606";
 
 // Unendlich (kein Maximum, z. B. Tabelle 7 Fall D > 25) lässt sich nicht speichern -> null.
@@ -60,6 +61,7 @@ export default async function Page() {
   return (
     <>
       <h1>Schweißer</h1>
+      <ZertifikatUpload />
       <form className="card" action={neu}>
         <input name="name" placeholder="Name" required /><input name="stamp" placeholder="Stempel" />
         <input name="process" placeholder="Verfahren (z. B. 135)" /><input name="mg" placeholder="Werkstoffgruppe" />
