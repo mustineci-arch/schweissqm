@@ -1,6 +1,6 @@
 // Deckungsprüfung – Tri-State. Keine Freigabe bei fehlenden Daten.
 // Nur direkte Vergleiche gegen gespeicherte Bereiche. Normtabellen (z. B. ISO 15614-1
-// Geltungsbereich Blechdicke) sind NICHT implementiert -> NICHT_BEWERTBAR.
+// Geltungsbereich) sind NICHT implementiert -> NICHT_BEWERTBAR.
 export type Status = "GEDECKT" | "NICHT_GEDECKT" | "NICHT_BEWERTBAR";
 export type Pruefpunkt = { parameter: string; soll: string; ist: string; regel: string; status: Status };
 
@@ -59,7 +59,7 @@ export function schweisserGegenWps(wps: WpsRev, cert: Cert, heute = new Date()):
   return [
     eq("Verfahren", wps.process, cert.process, regel),
     eq("Werkstoffgruppe", wps.material_group, cert.material_group, regel),
-    bereich("Blechdicke", wps.thickness_min, wps.thickness_max, cert.thickness_min, cert.thickness_max, regel),
+    bereich("Dicke (Blech oder Rohrwand)", wps.thickness_min, wps.thickness_max, cert.thickness_min, cert.thickness_max, regel),
     positionen(wps.positions, cert.positions),
     // Durchmesser nur relevant, wenn die WPS überhaupt einen Rohrdurchmesser fordert (sonst Blech-WPS).
     ...(wps.diameter_min !== null ? [durchmesser(wps.diameter_min, cert.diameter_min, cert.diameter_max)] : []),
