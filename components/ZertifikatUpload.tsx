@@ -31,7 +31,7 @@ function setzeFormularWerte(form: HTMLFormElement, werte: ReturnType<typeof zuFo
   if (werte.positions?.length) setzen("positions", werte.positions.join(", "));
 }
 
-export function ZertifikatUpload() {
+export function ZertifikatUpload({ formSelector = "form.card" }: { formSelector?: string }) {
   const [laedt, setLaedt] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [records, setRecords] = useState<Zertifikat[]>([]);
@@ -56,7 +56,7 @@ export function ZertifikatUpload() {
   }
 
   function uebernehmen(d: Zertifikat) {
-    const form = document.querySelector("form.card") as HTMLFormElement | null;
+    const form = document.querySelector(formSelector) as HTMLFormElement | null;
     if (!form) return;
     setzeFormularWerte(form, zuFormular(d));
     setRecords([]);
