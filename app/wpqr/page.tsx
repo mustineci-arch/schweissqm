@@ -83,7 +83,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
       <table><thead><tr><th>WPQR-Nr</th><th>Norm</th><th>Verfahren</th><th>Werkstoff</th><th>Dicke</th><th>Letzte AP</th><th>Nächste AP</th><th>Status</th><th>WPS daraus</th></tr></thead><tbody>
         {gefiltert.map((q) => (
           <tr key={q.id}>
-            <td>{q.wpqr_no}</td><td>{q.standard} {q.standard_edition}</td><td>{q.process}</td><td>{q.material_group}</td><td>{q.thickness_test}</td>
+            <td><Link href={`/wpqr/${q.id}`}>{q.wpqr_no}</Link></td><td>{q.standard} {q.standard_edition}</td><td>{q.process}</td><td>{q.material_group}</td><td>{q.thickness_test}</td>
             <td>{letzteApJeWpqr.get(q.id) ?? "–"}</td><td>{q.naechste ?? "–"}</td>
             <td><span className="status" style={q.status === "überfällig" ? { background: "#fdecea", color: "#8a1f15" } : q.status === "bald fällig" ? { background: "#fdf1d6", color: "#7a5a00" } : q.status === "gültig" ? { background: "#dff3e6", color: "#14663a" } : undefined}>{q.status}</span></td>
             <td><form action={wpsAusWpqr} style={{ display: "flex", gap: 4 }}><input type="hidden" name="id" value={q.id} /><input name="wps_no" placeholder="neue WPS-Nr" required style={{ width: 110 }} /><button className="sek">Erstellen</button></form></td>
