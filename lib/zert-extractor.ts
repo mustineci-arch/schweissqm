@@ -357,30 +357,76 @@ export function isScanned(words: Wort[], text: string): boolean {
   return words.length < 25 && text.trim().length < 200;
 }
 
+// Bereich aus dem vom Prüfer selbst angegebenen Geltungsbereich-Text parsen, z. B.
+// "3,00 - 10,20" -> {min:3, max:10.2}, "≥ 25,00" -> {min:25, max:null} (nach oben offen).
+function parseBereich(s: string): { min: number; max: number | null } | null {
+  const text = (s || "").trim();
+  if (!text || /^-+$/.test(text)) return null;
+  const num = (x: string) => parseFloat(x.replace(",", "."));
+  let m = /([\d]+[.,]?[\d]*)\s*(?:-|bis|to)\s*([\d]+[.,]?[\d]*)/i.exec(text);
+  if (m) return { min: num(m[1]), max: num(m[2]) };
+  m = /(?:≥|>=|ab)\s*([\d]+[.,]?[\d]*)/.exec(text);
+  if (m) return { min: num(m[1]), max: null };
+  m = /^([\d]+[.,]?[\d]*)$/.exec(text);
+  if (m) return { min: num(m[1]), max: num(m[1]) };
+  return null;
+}
+
+const ALLE_POSITIONEN = ["PA", "PB", "PC", "PD", "PE", "PF", "PG", "PH", "PJ", "HL045", "JL045"];
+// Positions-Geltungsbereich-Text parsen: entweder "Alle außer / All except PG" (Ausschlussliste)
+// oder eine direkte Aufzählung ("ss mb, bs, ss gb" o. Ä. kommt hier nicht vor, nur Positionscodes).
+function parsePositionsGeltung(s: string): string[] | null {
+  const text = (s || "").trim();
+  if (!text || /^-+$/.test(text)) return null;
+  if (/alle außer|all except/i.test(text)) {
+    const ausgeschlossen = (text.match(/PA|PB|PC|PD|PE|PF|PG|PH|PJ|HL045|JL045/gi) || []).map((x) => x.toUpperCase());
+    return ALLE_POSITIONEN.filter((p) => !ausgeschlossen.includes(p));
+  }
+  const liste = text.match(/PA|PB|PC|PD|PE|PF|PG|PH|PJ|HL045|JL045/gi);
+  return liste && liste.length ? [...new Set(liste.map((x) => x.toUpperCase()))] : null;
+}
+
 // Nur die reine Auswertung von bereits extrahierten Wörtern/Text (kein PDF-Zugriff) – testbar
 // ohne Browser/pdfjs. Das Einlesen der PDF-Seiten selbst passiert im Client (siehe ZertifikatUpload).
 // Bildet die Rohfelder des Zertifikats auf die Formularfelder der Schweißer-Seite ab
 // (einfache, best-effort Erkennung – der Mensch sieht die Werte im Formular und bestätigt/korrigiert).
+// Wichtig: wo das Zertifikat den Geltungsbereich (Dicke/Durchmesser/Position) bereits selbst
+// ausweist, wird DER übernommen statt ihn aus dem Prüfstück-Wert neu zu berechnen – der Prüfer
+// kennt z. B. bei kombinierten Zertifikaten (mehrere Prüfstücke) den tatsächlichen Gesamtbereich,
+// während eine Neuberechnung aus nur einem Prüfstück den Bereich unterschätzen könnte.
 export type FormularWerte = {
   name?: string; process?: string; mg?: string; nahtart?: "BW" | "FW"; produkt?: "P" | "T";
-  s_oder_t?: number; durchmesser?: number; position_roh?: string; bis?: string;
+  bezeichnung?: string; s_oder_t?: number; durchmesser?: number; position_roh?: string; bis?: string;
+  thickness_min?: number; thickness_max?: number; diameter_min?: number; diameter_max?: number; positions?: string[];
 };
 export function zuFormular(d: Zertifikat): FormularWerte {
   const out: FormularWerte = {};
   if (d.name) out.name = d.name;
+  if (d.bezeichnung) out.bezeichnung = d.bezeichnung;
   const prozessM = /\d+/.exec(d.schweissprozess || "");
   if (prozessM) out.process = prozessM[0];
   const mgM = /[\d.]+/.exec(d.werkstoffgruppe || "");
   if (mgM) out.mg = mgM[0];
   const nahtM = /\b(BW|FW)\b/i.exec(d.nahtart || "");
   if (nahtM) out.nahtart = nahtM[1].toUpperCase() as "BW" | "FW";
+
   const dickeRoh = out.nahtart === "FW" ? d.werkstoffdicke_t || d.schweissgutdicke_s : d.schweissgutdicke_s || d.werkstoffdicke_t;
   const dickeM = /([\d]+[.,]?[\d]*)/.exec(dickeRoh || "");
   if (dickeM) out.s_oder_t = parseFloat(dickeM[1].replace(",", "."));
+  const dickeGeltung = out.nahtart === "FW" ? d.werkstoffdicke_t_g || d.schweissgutdicke_s_g : d.schweissgutdicke_s_g || d.werkstoffdicke_t_g;
+  const dickeBereich = parseBereich(dickeGeltung || "");
+  if (dickeBereich) { out.thickness_min = dickeBereich.min; if (dickeBereich.max !== null) out.thickness_max = dickeBereich.max; }
+
   const dM = /([\d]+[.,]?[\d]*)/.exec(d.rohraussendurchmesser || "");
   if (dM) { out.durchmesser = parseFloat(dM[1].replace(",", ".")); out.produkt = "T"; } else out.produkt = "P";
+  const durchmesserBereich = parseBereich(d.rohraussendurchmesser_g || "");
+  if (durchmesserBereich) { out.diameter_min = durchmesserBereich.min; if (durchmesserBereich.max !== null) out.diameter_max = durchmesserBereich.max; }
+
   const posM = /\b(PA|PB|PC|PD|PE|PF|PG|PH|PJ|HL045|JL045)\b/i.exec(d.schweissposition || "");
   if (posM) out.position_roh = posM[1].toUpperCase();
+  const positionenGeltung = parsePositionsGeltung(d.schweissposition_geltung || "");
+  if (positionenGeltung) out.positions = positionenGeltung;
+
   if (d.gueltig_bis && /^\d{4}-\d{2}-\d{2}/.test(d.gueltig_bis)) out.bis = d.gueltig_bis.slice(0, 10);
   return out;
 }
