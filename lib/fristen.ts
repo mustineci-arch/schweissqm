@@ -11,3 +11,13 @@ export function ampel(datum: string | null | undefined, heute = new Date()): { f
   if (tage <= GELB_TAGE) return { farbe: "gelb", tage, text: `noch ${tage} Tg.` };
   return { farbe: "gruen", tage, text: `noch ${tage} Tg.` };
 }
+
+// 6-Monats-Bestätigung: fällig, wenn seit der letzten Bestätigung (oder, falls nie bestätigt,
+// seit der Zertifikatsausstellung) mehr als 182 Tage vergangen sind.
+export const BESTAETIGUNG_TAGE = 182;
+
+export function bestaetigungFaellig(letzteBestaetigung: string | null | undefined, heute = new Date()): boolean {
+  if (!letzteBestaetigung) return true;
+  const seit = Math.floor((heute.getTime() - new Date(letzteBestaetigung + "T00:00:00").getTime()) / 86400000);
+  return seit > BESTAETIGUNG_TAGE;
+}

@@ -1,99 +1,64 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { ctx } from "@/lib/tenant";
 import { FristAmpel } from "@/components/Ampel";
 import { ZertifikatUpload } from "@/components/ZertifikatUpload";
-import { ampel } from "@/lib/fristen";
-import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, pruefbezeichnung, type Nahtart, type Produktform } from "@/lib/iso9606";
-
-// Unendlich (kein Maximum, z. B. Tabelle 7 Fall D > 25) lässt sich nicht speichern -> null.
-const speicherbar = (v: number) => (v === Infinity ? null : v);
+import { ampel, bestaetigungFaellig } from "@/lib/fristen";
+import { zertifikatFelderAusFormular } from "@/lib/cert-save";
+import { pruefbezeichnung } from "@/lib/iso9606";
 
 async function neu(fd: FormData) {
   "use server";
   const { sb, tenantId } = await ctx();
   if (!tenantId) return;
   const { data: w } = await sb.from("welders").insert({ tenant_id: tenantId, name: String(fd.get("name")), stamp: String(fd.get("stamp")) || null, birthdate: String(fd.get("birthdate")) || null }).select("id").single();
-  const n = (k: string) => (fd.get(k) ? Number(fd.get(k)) : null);
   if (w && fd.get("process")) {
-    const process = String(fd.get("process"));
-    const nahtart = (String(fd.get("nahtart")) || null) as Nahtart | null;
-    const produkt = (String(fd.get("produkt")) || null) as Produktform | null;
-    const sOderT = n("s_oder_t");
-    const positionRoh = String(fd.get("position_roh") ?? "").trim().toUpperCase() || null;
-
-    // Manuell eingetragene Werte (z. B. der vom Prüfer selbst ausgewiesene Geltungsbereich,
-    // den das Zertifikat-Einlesen vorbefüllt) haben Vorrang vor dem Normrechner – der greift
-    // nur ergänzend, wenn das jeweilige Feld leer gelassen wurde.
-    let tmin = n("tmin"), tmax = n("tmax");
-    if (tmin === null && nahtart && sOderT) {
-      const b = nahtart === "FW" ? fwThicknessRange(sOderT) : bwThicknessRange(sOderT, [process]);
-      tmin = b.min; tmax = b.max !== null ? speicherbar(b.max) : null;
-    }
-    let dmin = n("dmin"), dmax = n("dmax");
-    const D = n("durchmesser");
-    if (dmin === null && produkt && D) {
-      const b = diameterRange(D, produkt);
-      dmin = b.min; dmax = b.max !== null ? speicherbar(b.max) : null;
-    }
-    let positions: string[] | null = String(fd.get("positions") ?? "").trim()
-      ? String(fd.get("positions")).toUpperCase().split(/[\s,;]+/).filter(Boolean) : null;
-    if (positions === null && nahtart && positionRoh) {
-      positions = positionScope({
-        nahtart, produkt: produkt ?? "P", position: positionRoh, durchmesser: D,
-        hatPC: fd.get("hatPC") === "on", mehrfachlage: fd.get("mehrfachlage") === "on",
-        richtung: fd.get("richtung") === "fallend" ? "fallend" : "steigend",
-      });
-    }
-
-    await sb.from("welder_certificates").insert({
-      tenant_id: tenantId, welder_id: w.id, process, bezeichnung: String(fd.get("bezeichnung")) || null,
-      material_group: String(fd.get("mg")) || null, joint_type: nahtart, product_type: produkt,
-      fm_group: String(fd.get("fmGroup")) || null, filler_type: String(fd.get("fillerType")) || null,
-      weld_detail: String(fd.get("weldDetail")) || null, layer_build: String(fd.get("layerBuild")) || null,
-      thickness_min: tmin, thickness_max: tmax, diameter_min: dmin, diameter_max: dmax, positions,
-      has_fillet_test: fd.get("hasFilletTest") === "on", combined_joint_test: fd.get("combinedJointTest") === "on", test_thickness: sOderT,
-      test_diameter: D, test_position: positionRoh, fixed_pipe: fd.get("fixedPipe") === "on", rotating_pipe: fd.get("rotatingPipe") === "on",
-      valid_until: String(fd.get("bis")) || null,
-    });
+    await sb.from("welder_certificates").insert({ tenant_id: tenantId, welder_id: w.id, ...zertifikatFelderAusFormular(fd) });
   }
   revalidatePath("/schweisser");
 }
 
 type Farbe = "rot" | "gelb" | "gruen" | "grau";
 
-function status(certs: { valid_until: string | null }[]): { label: string; farbe: Farbe; naechsterAblauf: string | null; ablaufFarbe: Farbe } {
+function status(certs: { valid_until: string | null; last_confirmed_on?: string | null }[]): { label: string; farbe: Farbe; naechsterAblauf: string | null; ablaufFarbe: Farbe; bestaetigungFaellig: boolean } {
   const mitFarbe = certs.map((c) => ({ ...c, farbe: ampel(c.valid_until).farbe }));
   const gueltig = mitFarbe.filter((c) => c.farbe === "gruen" || c.farbe === "gelb");
+  const faellig = gueltig.some((c) => bestaetigungFaellig(c.last_confirmed_on));
   if (gueltig.length) {
     gueltig.sort((a, b) => String(a.valid_until).localeCompare(String(b.valid_until)));
     const naechster = gueltig[0];
-    return { label: "gültig", farbe: "gruen", naechsterAblauf: naechster.valid_until, ablaufFarbe: naechster.farbe };
+    return { label: "gültig", farbe: "gruen", naechsterAblauf: naechster.valid_until, ablaufFarbe: naechster.farbe, bestaetigungFaellig: faellig };
   }
-  if (mitFarbe.some((c) => c.farbe === "rot")) return { label: "abgelaufen", farbe: "rot", naechsterAblauf: null, ablaufFarbe: "rot" };
-  return { label: "unbekannt", farbe: "grau", naechsterAblauf: null, ablaufFarbe: "grau" };
+  if (mitFarbe.some((c) => c.farbe === "rot")) return { label: "abgelaufen", farbe: "rot", naechsterAblauf: null, ablaufFarbe: "rot", bestaetigungFaellig: false };
+  if (!certs.length) return { label: "ohne Zertifikat", farbe: "grau", naechsterAblauf: null, ablaufFarbe: "grau", bestaetigungFaellig: false };
+  return { label: "unbekannt", farbe: "grau", naechsterAblauf: null, ablaufFarbe: "grau", bestaetigungFaellig: false };
 }
 
-export default async function Page({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
+export default async function Page({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; aktiv?: string }> }) {
   const sp = await searchParams;
   const { sb } = await ctx();
-  const { data } = await sb.from("welders").select("id,name,stamp,birthdate,welder_certificates(process,bezeichnung,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,test_thickness,test_diameter,test_position,fixed_pipe,rotating_pipe,valid_until)").order("name");
+  const { data } = await sb.from("welders").select("id,name,stamp,birthdate,active,welder_certificates(process,bezeichnung,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,test_thickness,test_diameter,test_position,fixed_pipe,rotating_pipe,valid_until,last_confirmed_on)").order("name");
 
   const schweisser = (data ?? []).map((w) => {
     const certs = (w.welder_certificates ?? []) as any[];
     return { ...w, certs, ...status(certs) };
   });
 
+  const aktivFilter = sp.aktiv ?? "aktiv";
+  const nachAktiv = schweisser.filter((s) => aktivFilter === "alle" || (aktivFilter === "aktiv" ? s.active !== false : s.active === false));
+
   const stats = {
-    gesamt: schweisser.length,
-    gueltig: schweisser.filter((s) => s.label === "gültig").length,
-    laeuftAb: schweisser.filter((s) => s.label === "gültig" && s.ablaufFarbe === "gelb").length,
-    abgelaufen: schweisser.filter((s) => s.label === "abgelaufen").length,
+    gesamt: nachAktiv.length,
+    gueltig: nachAktiv.filter((s) => s.label === "gültig").length,
+    laeuftAb: nachAktiv.filter((s) => s.label === "gültig" && s.ablaufFarbe === "gelb").length,
+    bestaetigung: nachAktiv.filter((s) => s.bestaetigungFaellig).length,
   };
 
   const q = (sp.q ?? "").trim().toLowerCase();
   const statusFilter = sp.status ?? "";
-  const gefiltert = schweisser.filter((s) => {
-    if (statusFilter && s.label !== statusFilter) return false;
+  const gefiltert = nachAktiv.filter((s) => {
+    if (statusFilter === "Bestätigung fällig") { if (!s.bestaetigungFaellig) return false; }
+    else if (statusFilter && s.label !== statusFilter) return false;
     if (!q) return true;
     const heuhaufen = [s.name, s.stamp, ...s.certs.map((c) => c.bezeichnung ?? pruefbezeichnung(c)), ...s.certs.map((c) => c.process)].join(" ").toLowerCase();
     return heuhaufen.includes(q);
@@ -102,12 +67,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
   return (
     <>
       <h1>Schweißer</h1>
-      <p className="sub">Qualifikationen je Schweißer · Zertifikate einordnen</p>
+      <p className="sub">Qualifikationen je Schweißer · Zertifikate einordnen · 6-Monats-Bestätigung</p>
       <div className="kacheln">
         <div className="kachel grau"><div className="zahl">{stats.gesamt}</div><div className="label">Schweißer aktiv</div></div>
         <div className="kachel gruen"><div className="zahl">{stats.gueltig}</div><div className="label">mit gültigem Zertifikat</div></div>
         <div className="kachel gelb"><div className="zahl">{stats.laeuftAb}</div><div className="label">Zertifikat läuft in 60 Tg. ab</div></div>
-        <div className="kachel rot"><div className="zahl">{stats.abgelaufen}</div><div className="label">Zertifikat abgelaufen</div></div>
+        <div className="kachel rot"><div className="zahl">{stats.bestaetigung}</div><div className="label">Bestätigung fällig</div></div>
       </div>
       <form className="card" method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input name="q" defaultValue={sp.q ?? ""} placeholder="Name, Zeichen oder Bezeichnung (z. B. 141, FM3, PH) …" style={{ flex: 1, minWidth: 220 }} />
@@ -115,18 +80,25 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
           <option value="">Status: alle</option>
           <option value="gültig">gültig</option>
           <option value="abgelaufen">abgelaufen</option>
+          <option value="ohne Zertifikat">ohne Zertifikat</option>
           <option value="unbekannt">unbekannt</option>
+          <option value="Bestätigung fällig">Bestätigung fällig</option>
+        </select>
+        <select name="aktiv" defaultValue={aktivFilter}>
+          <option value="aktiv">nur aktive</option>
+          <option value="alle">alle</option>
+          <option value="ausgeschieden">nur ausgeschiedene</option>
         </select>
         <button className="sek">Filtern</button>
-        {(sp.q || statusFilter) && <a className="btn sek" href="/schweisser">Zurücksetzen</a>}
+        {(sp.q || statusFilter || sp.aktiv) && <a className="btn sek" href="/schweisser">Zurücksetzen</a>}
       </form>
-      <table><thead><tr><th>Name</th><th>Zeichen</th><th>Geburtsdatum</th><th>Zertifikate</th><th>Qualifikationen (gültig)</th><th>Status</th><th>Nächster Ablauf</th></tr></thead><tbody>
+      <table><thead><tr><th>Name</th><th>Zeichen</th><th>Geburtsdatum</th><th>Zertifikate</th><th>Qualifikationen (gültig)</th><th>Status</th><th>Nächster Ablauf</th><th>Bestätigung</th></tr></thead><tbody>
         {gefiltert.map((s) => {
           const gueltig = s.certs.filter((c) => ampel(c.valid_until).farbe === "gruen" || ampel(c.valid_until).farbe === "gelb");
           const sichtbar = gueltig.slice(0, 4);
           return (
             <tr key={s.id}>
-              <td>{s.name}</td>
+              <td><Link href={`/schweisser/${s.id}`}>{s.name}</Link></td>
               <td>{s.stamp ?? "–"}</td>
               <td>{s.birthdate ?? "–"}</td>
               <td>{gueltig.length} gültig / {s.certs.length}</td>
@@ -137,10 +109,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
               </td>
               <td><span className={`status ${s.label === "gültig" ? "freigegeben" : s.label === "abgelaufen" ? "" : "entwurf"}`} style={s.label === "abgelaufen" ? { background: "#fdecea", color: "#8a1f15" } : undefined}>{s.label}</span></td>
               <td>{s.naechsterAblauf ? <FristAmpel datum={s.naechsterAblauf} /> : "–"}</td>
+              <td>{s.bestaetigungFaellig ? <span className="status" style={{ background: "#fdecea", color: "#8a1f15" }}>fällig</span> : "–"}</td>
             </tr>
           );
         })}
-        {!gefiltert.length && <tr><td colSpan={7} className="sub">Keine Schweißer gefunden.</td></tr>}
+        {!gefiltert.length && <tr><td colSpan={8} className="sub">Keine Schweißer gefunden.</td></tr>}
       </tbody></table>
 
       <h2>Neuen Schweißer anlegen</h2>
@@ -176,24 +149,6 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
         <select name="layerBuild" defaultValue=""><option value="">Lagenaufbau –</option><option value="sl">sl einlagig</option><option value="ml">ml mehrlagig</option></select>
         <button>Anlegen</button>
       </form>
-
-      <h2>Alle Prüfungen (Detailansicht)</h2>
-      <table><thead><tr><th>Name</th><th>Stempel</th><th>Prüfungen</th></tr></thead><tbody>
-        {schweisser.map((w) => (
-          <tr key={w.id}><td>{w.name}</td><td>{w.stamp}</td>
-            <td>{(w.certs as any[]).map((c, i) => (
-              <div key={i} style={{ marginBottom: 6 }}>
-                <div><code>{c.bezeichnung || pruefbezeichnung(c)}</code> · <FristAmpel datum={c.valid_until} /></div>
-                <div style={{ fontSize: 12, opacity: .8 }}>
-                  {c.material_group ?? "–"} / {c.thickness_min ?? "–"}–{c.thickness_max ?? "–"} mm
-                  {" / Ø "}{c.diameter_min ?? "–"}–{c.diameter_max ?? "∞"} mm
-                  {" / "}{(c.positions ?? []).join(", ") || "–"}
-                  {(c.has_fillet_test || c.combined_joint_test || c.fixed_pipe || c.rotating_pipe) && <> / {[c.has_fillet_test && "+Kehlnaht", c.combined_joint_test && "+kombiniert", c.fixed_pipe && "+festes Rohr", c.rotating_pipe && "+rotierendes Rohr"].filter(Boolean).join(" ")}</>}
-                </div>
-              </div>
-            ))}</td></tr>
-        ))}
-      </tbody></table>
     </>
   );
 }
