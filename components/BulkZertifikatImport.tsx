@@ -3,7 +3,7 @@ import { useState } from "react";
 import { extrahiereZertifikate } from "@/lib/pdf-zertifikat";
 import { zuFormular, type Zertifikat } from "@/lib/zert-extractor";
 
-type Zeile = ReturnType<typeof zuFormular> & { _datei: string; _seite: number; _fehler?: string };
+type Zeile = ReturnType<typeof zuFormular> & { _datei: string; _seite: number; _ocr_used?: boolean };
 
 export function BulkZertifikatImport() {
   const [laedt, setLaedt] = useState(false);
@@ -29,7 +29,7 @@ export function BulkZertifikatImport() {
           if (d._error) { neueUebersprungen.push({ datei: datei.name, seite: d._seite, grund: d._error }); continue; }
           const f = zuFormular(d);
           if (!f.process) { neueUebersprungen.push({ datei: datei.name, seite: d._seite, grund: "Kein Verfahren erkannt" }); continue; }
-          neueZeilen.push({ ...f, _datei: datei.name, _seite: d._seite });
+          neueZeilen.push({ ...f, _datei: datei.name, _seite: d._seite, _ocr_used: d._ocr_used });
         }
       } catch (err) {
         neueUebersprungen.push({ datei: datei.name, seite: 1, grund: err instanceof Error ? err.message : "Konnte PDF nicht lesen." });
@@ -89,7 +89,7 @@ export function BulkZertifikatImport() {
           <table><thead><tr><th>Datei</th><th>Name</th><th>Bezeichnung</th><th>Verfahren</th><th>Gültig bis</th><th></th></tr></thead><tbody>
             {zeilen.map((z, i) => (
               <tr key={i}>
-                <td style={{ fontSize: 12 }}>{z._datei} S.{z._seite}</td>
+                <td style={{ fontSize: 12 }}>{z._datei} S.{z._seite}{z._ocr_used && <div style={{ color: "#7a5a00" }}>⚠ OCR</div>}</td>
                 <td><input value={z.name ?? ""} onChange={(e) => feldAendern(i, "name", e.target.value)} placeholder="Name (bitte prüfen)" style={{ width: 160 }} /></td>
                 <td style={{ fontSize: 12 }}>{z.bezeichnung ?? "–"}</td>
                 <td>{z.process}</td>
@@ -98,6 +98,7 @@ export function BulkZertifikatImport() {
               </tr>
             ))}
           </tbody></table>
+          {zeilen.some((z) => z._ocr_used) && <p className="sub" style={{ color: "#7a5a00" }}>⚠ Zeilen mit OCR-Hinweis stammen von gescannten Seiten – bitte besonders sorgfältig prüfen.</p>}
           <button type="button" style={{ marginTop: 8 }} onClick={alleUebernehmen} disabled={speichertLaedt || zeilen.some((z) => !z.name)}>
             {speichertLaedt ? "Speichere …" : `✔ Alle ${zeilen.length} übernehmen`}
           </button>

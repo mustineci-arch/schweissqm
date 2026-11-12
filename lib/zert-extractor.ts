@@ -418,7 +418,7 @@ export function zuFormular(d: Zertifikat): FormularWerte {
   if (dickeBereich) { out.thickness_min = dickeBereich.min; if (dickeBereich.max !== null) out.thickness_max = dickeBereich.max; }
 
   const dM = /([\d]+[.,]?[\d]*)/.exec(d.rohraussendurchmesser || "");
-  if (dM) { out.durchmesser = parseFloat(dM[1].replace(",", ".")); out.produkt = "T"; } else out.produkt = "P";
+  if (dM) { out.durchmesser = parseFloat(dM[1].replace(",", ".")); out.produkt = "T"; }
   const durchmesserBereich = parseBereich(d.rohraussendurchmesser_g || "");
   if (durchmesserBereich) { out.diameter_min = durchmesserBereich.min; if (durchmesserBereich.max !== null) out.diameter_max = durchmesserBereich.max; }
 
@@ -428,7 +428,35 @@ export function zuFormular(d: Zertifikat): FormularWerte {
   if (positionenGeltung) out.positions = positionenGeltung;
 
   if (d.gueltig_bis && /^\d{4}-\d{2}-\d{2}/.test(d.gueltig_bis)) out.bis = d.gueltig_bis.slice(0, 10);
+
+  // Fallback, wenn die einzelnen Felder nicht erkannt wurden (z. B. bei per OCR gelesenen
+  // gescannten Seiten ohne Textlayer/Tabellenstruktur, wo nur der Bezeichnung-Fließtext
+  // zuverlässig lesbar ist): Verfahren/Produktform/Nahtart/Dicke/Durchmesser/Position direkt
+  // aus der Bezeichnung selbst ableiten, z. B. "ISO 9606-1 141 T BW FM5 S s5,1 D48,3 PH-L045 ss gb".
+  if (d.bezeichnung) ausBezeichnungErgaenzen(out, d.bezeichnung);
+  if (!out.produkt) out.produkt = "P";
   return out;
+}
+
+function ausBezeichnungErgaenzen(out: FormularWerte, bezeichnung: string) {
+  const m = /\b(\d{2,3})\s+([PT])\s+(BW|FW)\b/i.exec(bezeichnung);
+  if (m) {
+    if (!out.process) out.process = m[1];
+    if (!out.produkt) out.produkt = m[2].toUpperCase() as "P" | "T";
+    if (!out.nahtart) out.nahtart = m[3].toUpperCase() as "BW" | "FW";
+  }
+  if (out.s_oder_t === undefined) {
+    const sM = /\bs\s*([\d]+[.,]?[\d]*)/i.exec(bezeichnung);
+    if (sM) out.s_oder_t = parseFloat(sM[1].replace(",", "."));
+  }
+  if (out.durchmesser === undefined) {
+    const dM = /\bD\s*([\d]+[.,]?[\d]*)/.exec(bezeichnung);
+    if (dM) out.durchmesser = parseFloat(dM[1].replace(",", "."));
+  }
+  if (!out.position_roh) {
+    const posM = /\b(PA|PB|PC|PD|PE|PF|PG|PH|PJ|HL045|JL045)\b/i.exec(bezeichnung);
+    if (posM) out.position_roh = posM[1].toUpperCase();
+  }
 }
 
 export function auswerten(words: Wort[], text: string, datei: string, seite: number, pages: number): Zertifikat {

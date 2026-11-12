@@ -116,6 +116,39 @@ describe("zuFormular(): Zertifikat-Rohfelder auf Formularfelder abbilden", () =>
   });
 });
 
+describe("zuFormular(): Fallback aus der Bezeichnung, wenn die Einzelfelder fehlen (z. B. OCR ohne Tabellenstruktur)", () => {
+  const leer: Zertifikat = {
+    _datei: "x", _seite: 1, _pages: 1, _ocr_used: true, _error: "",
+    zertifikat_nr: "", bezeichnung: "ISO 9606-1 141 T BW FM5 S s5,1 D48,3 PH-L045 ss gb", name: "Max Mustermann",
+    geburtsdatum: "", geburtsort: "", arbeitgeber: "", wps_bezug: "", auftrags_nr: "", pruefberichts_nr: "", pruefgrundlage: "",
+    schweissprozess: "", geltungsbereich_prozess: "", nahtart: "", nahtart_geltung: "",
+    werkstoffgruppe: "", werkstoffgruppe_geltung: "", schweisszusatzgruppe: "",
+    schweissposition: "", schweissposition_geltung: "", rohraussendurchmesser: "", rohraussendurchmesser_g: "",
+    schweissgutdicke_s: "", schweissgutdicke_s_g: "", werkstoffdicke_t: "", werkstoffdicke_t_g: "",
+    werkstoff: "", zusatz_filler: "", datum_schweissen: "", gueltig_bis: "",
+    verlaengerung_nach: "", fachkunde: "", ergaenzende_kehlnaht: "",
+  };
+
+  it("leitet Verfahren/Produktform/Nahtart/Dicke/Durchmesser/Position aus der Bezeichnung ab", () => {
+    const f = zuFormular(leer);
+    expect(f).toMatchObject({ process: "141", produkt: "T", nahtart: "BW", s_oder_t: 5.1, durchmesser: 48.3, position_roh: "PH" });
+  });
+
+  it("FW-Blech-Bezeichnung ohne Durchmesser wird korrekt als P erkannt", () => {
+    const f = zuFormular({ ...leer, bezeichnung: "ISO 9606-1 135 P FW FM1 S s6 PB" });
+    expect(f).toMatchObject({ process: "135", produkt: "P", nahtart: "FW", s_oder_t: 6, position_roh: "PB" });
+    expect(f.durchmesser).toBeUndefined();
+  });
+
+  it("vorhandene Einzelfelder haben Vorrang vor der Bezeichnung-Ableitung", () => {
+    const f = zuFormular({ ...leer, schweissprozess: "111", schweissgutdicke_s: "9" });
+    expect(f.process).toBe("111");
+    expect(f.s_oder_t).toBe(9);
+    // Position/Produktform wurden nicht aus den Einzelfeldern gesetzt -> dürfen aus der Bezeichnung kommen
+    expect(f.position_roh).toBe("PH");
+  });
+});
+
 describe("zuFormular(): vom Zertifikat selbst ausgewiesener Geltungsbereich hat Vorrang vor Neuberechnung aus dem Prüfstück", () => {
   const basis: Zertifikat = {
     _datei: "x", _seite: 1, _pages: 1, _ocr_used: false, _error: "",
