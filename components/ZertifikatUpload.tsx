@@ -13,6 +13,7 @@ function setzeFormularWerte(form: HTMLFormElement, werte: ReturnType<typeof zuFo
     if (el) el.value = String(wert);
   };
   setzen("name", werte.name);
+  setzen("bezeichnung", werte.bezeichnung);
   setzen("process", werte.process);
   setzen("mg", werte.mg);
   setzen("nahtart", werte.nahtart);
@@ -21,6 +22,13 @@ function setzeFormularWerte(form: HTMLFormElement, werte: ReturnType<typeof zuFo
   setzen("durchmesser", werte.durchmesser);
   setzen("position_roh", werte.position_roh);
   setzen("bis", werte.bis);
+  // Vom Prüfer selbst ausgewiesener Geltungsbereich hat Vorrang vor dem Normrechner
+  // (siehe neu() in app/schweisser/page.tsx: manuelle Felder überschreiben ihn nicht).
+  setzen("tmin", werte.thickness_min);
+  setzen("tmax", werte.thickness_max);
+  setzen("dmin", werte.diameter_min);
+  setzen("dmax", werte.diameter_max);
+  if (werte.positions?.length) setzen("positions", werte.positions.join(", "));
 }
 
 export function ZertifikatUpload() {

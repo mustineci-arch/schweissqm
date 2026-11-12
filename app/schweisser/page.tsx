@@ -20,20 +20,23 @@ async function neu(fd: FormData) {
     const sOderT = n("s_oder_t");
     const positionRoh = String(fd.get("position_roh") ?? "").trim().toUpperCase() || null;
 
+    // Manuell eingetragene Werte (z. B. der vom Prüfer selbst ausgewiesene Geltungsbereich,
+    // den das Zertifikat-Einlesen vorbefüllt) haben Vorrang vor dem Normrechner – der greift
+    // nur ergänzend, wenn das jeweilige Feld leer gelassen wurde.
     let tmin = n("tmin"), tmax = n("tmax");
-    if (nahtart && sOderT) {
+    if (tmin === null && nahtart && sOderT) {
       const b = nahtart === "FW" ? fwThicknessRange(sOderT) : bwThicknessRange(sOderT, [process]);
       tmin = b.min; tmax = b.max !== null ? speicherbar(b.max) : null;
     }
     let dmin = n("dmin"), dmax = n("dmax");
     const D = n("durchmesser");
-    if (produkt && D) {
+    if (dmin === null && produkt && D) {
       const b = diameterRange(D, produkt);
       dmin = b.min; dmax = b.max !== null ? speicherbar(b.max) : null;
     }
     let positions: string[] | null = String(fd.get("positions") ?? "").trim()
       ? String(fd.get("positions")).toUpperCase().split(/[\s,;]+/).filter(Boolean) : null;
-    if (nahtart && positionRoh) {
+    if (positions === null && nahtart && positionRoh) {
       positions = positionScope({
         nahtart, produkt: produkt ?? "P", position: positionRoh, durchmesser: D,
         hatPC: fd.get("hatPC") === "on", mehrfachlage: fd.get("mehrfachlage") === "on",
@@ -42,7 +45,7 @@ async function neu(fd: FormData) {
     }
 
     await sb.from("welder_certificates").insert({
-      tenant_id: tenantId, welder_id: w.id, process,
+      tenant_id: tenantId, welder_id: w.id, process, bezeichnung: String(fd.get("bezeichnung")) || null,
       material_group: String(fd.get("mg")) || null, joint_type: nahtart, product_type: produkt,
       fm_group: String(fd.get("fmGroup")) || null, filler_type: String(fd.get("fillerType")) || null,
       weld_detail: String(fd.get("weldDetail")) || null, layer_build: String(fd.get("layerBuild")) || null,
@@ -57,7 +60,7 @@ async function neu(fd: FormData) {
 
 export default async function Page() {
   const { sb } = await ctx();
-  const { data } = await sb.from("welders").select("id,name,stamp,welder_certificates(process,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,test_thickness,test_diameter,test_position,fixed_pipe,rotating_pipe,valid_until)").order("name");
+  const { data } = await sb.from("welders").select("id,name,stamp,welder_certificates(process,bezeichnung,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,test_thickness,test_diameter,test_position,fixed_pipe,rotating_pipe,valid_until)").order("name");
   return (
     <>
       <h1>Schweißer</h1>
@@ -66,6 +69,7 @@ export default async function Page() {
         <input name="name" placeholder="Name" required /><input name="stamp" placeholder="Stempel" />
         <input name="process" placeholder="Verfahren (z. B. 135)" /><input name="mg" placeholder="Werkstoffgruppe" />
         <input name="bis" type="date" title="gültig bis" />
+        <input name="bezeichnung" placeholder="Genormte Bezeichnung (vom Zertifikat, optional)" style={{ width: "100%" }} />
         <p className="sub" style={{ margin: "8px 0 4px" }}>Manuell (überschreibt den Normrechner unten, falls dort nichts ausgefüllt ist):</p>
         <input name="tmin" type="number" step="0.1" placeholder="Dicke min" /><input name="tmax" type="number" step="0.1" placeholder="Dicke max" />
         <input name="dmin" type="number" step="0.1" placeholder="Durchmesser min" /><input name="dmax" type="number" step="0.1" placeholder="Durchmesser max" />
@@ -96,7 +100,7 @@ export default async function Page() {
           <tr key={w.id}><td>{w.name}</td><td>{w.stamp}</td>
             <td>{(w.welder_certificates as any[]).map((c, i) => (
               <div key={i} style={{ marginBottom: 6 }}>
-                <div><code>{pruefbezeichnung(c)}</code> · <FristAmpel datum={c.valid_until} /></div>
+                <div><code>{c.bezeichnung || pruefbezeichnung(c)}</code> · <FristAmpel datum={c.valid_until} /></div>
                 <div style={{ fontSize: 12, opacity: .8 }}>
                   {c.material_group ?? "–"} / {c.thickness_min ?? "–"}–{c.thickness_max ?? "–"} mm
                   {" / Ø "}{c.diameter_min ?? "–"}–{c.diameter_max ?? "∞"} mm

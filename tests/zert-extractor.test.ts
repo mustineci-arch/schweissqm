@@ -109,4 +109,61 @@ describe("zuFormular(): Zertifikat-Rohfelder auf Formularfelder abbilden", () =>
   it("ungültiges/leeres Gültigkeitsdatum wird nicht übernommen", () => {
     expect(zuFormular({ ...basis, gueltig_bis: "" }).bis).toBeUndefined();
   });
+
+  it("übernimmt die eigene Bezeichnung des Zertifikats, wenn vorhanden", () => {
+    expect(zuFormular({ ...basis, bezeichnung: "ISO 9606-1 141 T BW FM1 S s3,6 D60,3 PH" }).bezeichnung)
+      .toBe("ISO 9606-1 141 T BW FM1 S s3,6 D60,3 PH");
+  });
+});
+
+describe("zuFormular(): vom Zertifikat selbst ausgewiesener Geltungsbereich hat Vorrang vor Neuberechnung aus dem Prüfstück", () => {
+  const basis: Zertifikat = {
+    _datei: "x", _seite: 1, _pages: 1, _ocr_used: false, _error: "",
+    zertifikat_nr: "", bezeichnung: "", name: "", geburtsdatum: "", geburtsort: "", arbeitgeber: "",
+    wps_bezug: "", auftrags_nr: "", pruefberichts_nr: "", pruefgrundlage: "",
+    schweissprozess: "141", geltungsbereich_prozess: "", nahtart: "BW", nahtart_geltung: "",
+    werkstoffgruppe: "1.1", werkstoffgruppe_geltung: "", schweisszusatzgruppe: "",
+    schweissposition: "PH", schweissposition_geltung: "", rohraussendurchmesser: "60,3", rohraussendurchmesser_g: "",
+    schweissgutdicke_s: "3,6", schweissgutdicke_s_g: "", werkstoffdicke_t: "", werkstoffdicke_t_g: "",
+    werkstoff: "", zusatz_filler: "", datum_schweissen: "", gueltig_bis: "2026-03-15",
+    verlaengerung_nach: "", fachkunde: "", ergaenzende_kehlnaht: "",
+  };
+
+  it("kombiniertes Zertifikat (zwei Prüfstücke): Geltungsbereich aus den _g-Feldern statt Neuberechnung aus nur einem Prüfstück", () => {
+    const f = zuFormular({
+      ...basis,
+      schweissgutdicke_s_g: "1,50 - 12,00",
+      rohraussendurchmesser_g: "≥ 13,50",
+      schweissposition_geltung: "Alle außer / All except PG (F)",
+    });
+    expect(f.thickness_min).toBe(1.5);
+    expect(f.thickness_max).toBe(12);
+    expect(f.diameter_min).toBe(13.5);
+    expect(f.diameter_max).toBeUndefined();
+    expect(f.positions).toEqual(["PA", "PB", "PC", "PD", "PE", "PF", "PH", "PJ", "HL045", "JL045"]);
+  });
+
+  it("einzelne Positionsliste im Geltungsbereich wird übernommen", () => {
+    const f = zuFormular({ ...basis, schweissposition_geltung: "PA, PC, PF" });
+    expect(f.positions).toEqual(["PA", "PC", "PF"]);
+  });
+
+  it("ohne ausgewiesenen Geltungsbereich bleibt thickness_min/max/positions leer (Normrechner im UI übernimmt)", () => {
+    const f = zuFormular(basis);
+    expect(f.thickness_min).toBeUndefined();
+    expect(f.diameter_min).toBeUndefined();
+    expect(f.positions).toBeUndefined();
+  });
+
+  it("'-' als Geltungsbereich-Wert gilt als nicht ausgewiesen", () => {
+    const f = zuFormular({ ...basis, schweissgutdicke_s_g: "-", schweissposition_geltung: "-" });
+    expect(f.thickness_min).toBeUndefined();
+    expect(f.positions).toBeUndefined();
+  });
+
+  it("einzelner Zahlenwert im Geltungsbereich (min === max)", () => {
+    const f = zuFormular({ ...basis, rohraussendurchmesser_g: "60,3" });
+    expect(f.diameter_min).toBe(60.3);
+    expect(f.diameter_max).toBe(60.3);
+  });
 });
