@@ -69,6 +69,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
       <h1>Schweißer</h1>
       <p className="sub">Qualifikationen je Schweißer · Zertifikate einordnen · 6-Monats-Bestätigung</p>
       <p>
+        <Link className="btn sek" href="/schweisser/bulk-import">📂 Zertifikate einlesen (Ordner / PDFs)</Link>{" "}
         <a className="btn sek" href="/schweisser/export">📤 Excel-Export</a>{" "}
         <Link className="btn sek" href="/schweisser/import">📊 Excel-Übersicht importieren</Link>{" "}
         <Link className="btn sek" href="/schweisser/doppelte">🔗 Mögliche Doppelte</Link>
