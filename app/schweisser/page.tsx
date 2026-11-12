@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { ctx } from "@/lib/tenant";
 import { FristAmpel } from "@/components/Ampel";
 import { ZertifikatUpload } from "@/components/ZertifikatUpload";
+import { ampel } from "@/lib/fristen";
 import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, pruefbezeichnung, type Nahtart, type Produktform } from "@/lib/iso9606";
 
 // Unendlich (kein Maximum, z. B. Tabelle 7 Fall D > 25) lässt sich nicht speichern -> null.
@@ -11,7 +12,7 @@ async function neu(fd: FormData) {
   "use server";
   const { sb, tenantId } = await ctx();
   if (!tenantId) return;
-  const { data: w } = await sb.from("welders").insert({ tenant_id: tenantId, name: String(fd.get("name")), stamp: String(fd.get("stamp")) || null }).select("id").single();
+  const { data: w } = await sb.from("welders").insert({ tenant_id: tenantId, name: String(fd.get("name")), stamp: String(fd.get("stamp")) || null, birthdate: String(fd.get("birthdate")) || null }).select("id").single();
   const n = (k: string) => (fd.get(k) ? Number(fd.get(k)) : null);
   if (w && fd.get("process")) {
     const process = String(fd.get("process"));
@@ -58,15 +59,95 @@ async function neu(fd: FormData) {
   revalidatePath("/schweisser");
 }
 
-export default async function Page() {
+type Farbe = "rot" | "gelb" | "gruen" | "grau";
+
+function status(certs: { valid_until: string | null }[]): { label: string; farbe: Farbe; naechsterAblauf: string | null; ablaufFarbe: Farbe } {
+  const mitFarbe = certs.map((c) => ({ ...c, farbe: ampel(c.valid_until).farbe }));
+  const gueltig = mitFarbe.filter((c) => c.farbe === "gruen" || c.farbe === "gelb");
+  if (gueltig.length) {
+    gueltig.sort((a, b) => String(a.valid_until).localeCompare(String(b.valid_until)));
+    const naechster = gueltig[0];
+    return { label: "gültig", farbe: "gruen", naechsterAblauf: naechster.valid_until, ablaufFarbe: naechster.farbe };
+  }
+  if (mitFarbe.some((c) => c.farbe === "rot")) return { label: "abgelaufen", farbe: "rot", naechsterAblauf: null, ablaufFarbe: "rot" };
+  return { label: "unbekannt", farbe: "grau", naechsterAblauf: null, ablaufFarbe: "grau" };
+}
+
+export default async function Page({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
+  const sp = await searchParams;
   const { sb } = await ctx();
-  const { data } = await sb.from("welders").select("id,name,stamp,welder_certificates(process,bezeichnung,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,test_thickness,test_diameter,test_position,fixed_pipe,rotating_pipe,valid_until)").order("name");
+  const { data } = await sb.from("welders").select("id,name,stamp,birthdate,welder_certificates(process,bezeichnung,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,test_thickness,test_diameter,test_position,fixed_pipe,rotating_pipe,valid_until)").order("name");
+
+  const schweisser = (data ?? []).map((w) => {
+    const certs = (w.welder_certificates ?? []) as any[];
+    return { ...w, certs, ...status(certs) };
+  });
+
+  const stats = {
+    gesamt: schweisser.length,
+    gueltig: schweisser.filter((s) => s.label === "gültig").length,
+    laeuftAb: schweisser.filter((s) => s.label === "gültig" && s.ablaufFarbe === "gelb").length,
+    abgelaufen: schweisser.filter((s) => s.label === "abgelaufen").length,
+  };
+
+  const q = (sp.q ?? "").trim().toLowerCase();
+  const statusFilter = sp.status ?? "";
+  const gefiltert = schweisser.filter((s) => {
+    if (statusFilter && s.label !== statusFilter) return false;
+    if (!q) return true;
+    const heuhaufen = [s.name, s.stamp, ...s.certs.map((c) => c.bezeichnung ?? pruefbezeichnung(c)), ...s.certs.map((c) => c.process)].join(" ").toLowerCase();
+    return heuhaufen.includes(q);
+  });
+
   return (
     <>
       <h1>Schweißer</h1>
+      <p className="sub">Qualifikationen je Schweißer · Zertifikate einordnen</p>
+      <div className="kacheln">
+        <div className="kachel grau"><div className="zahl">{stats.gesamt}</div><div className="label">Schweißer aktiv</div></div>
+        <div className="kachel gruen"><div className="zahl">{stats.gueltig}</div><div className="label">mit gültigem Zertifikat</div></div>
+        <div className="kachel gelb"><div className="zahl">{stats.laeuftAb}</div><div className="label">Zertifikat läuft in 60 Tg. ab</div></div>
+        <div className="kachel rot"><div className="zahl">{stats.abgelaufen}</div><div className="label">Zertifikat abgelaufen</div></div>
+      </div>
+      <form className="card" method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input name="q" defaultValue={sp.q ?? ""} placeholder="Name, Zeichen oder Bezeichnung (z. B. 141, FM3, PH) …" style={{ flex: 1, minWidth: 220 }} />
+        <select name="status" defaultValue={statusFilter}>
+          <option value="">Status: alle</option>
+          <option value="gültig">gültig</option>
+          <option value="abgelaufen">abgelaufen</option>
+          <option value="unbekannt">unbekannt</option>
+        </select>
+        <button className="sek">Filtern</button>
+        {(sp.q || statusFilter) && <a className="btn sek" href="/schweisser">Zurücksetzen</a>}
+      </form>
+      <table><thead><tr><th>Name</th><th>Zeichen</th><th>Geburtsdatum</th><th>Zertifikate</th><th>Qualifikationen (gültig)</th><th>Status</th><th>Nächster Ablauf</th></tr></thead><tbody>
+        {gefiltert.map((s) => {
+          const gueltig = s.certs.filter((c) => ampel(c.valid_until).farbe === "gruen" || ampel(c.valid_until).farbe === "gelb");
+          const sichtbar = gueltig.slice(0, 4);
+          return (
+            <tr key={s.id}>
+              <td>{s.name}</td>
+              <td>{s.stamp ?? "–"}</td>
+              <td>{s.birthdate ?? "–"}</td>
+              <td>{gueltig.length} gültig / {s.certs.length}</td>
+              <td>
+                {sichtbar.map((c, i) => <div key={i} style={{ fontSize: 13 }}><code>{c.bezeichnung || pruefbezeichnung(c)}</code></div>)}
+                {gueltig.length > sichtbar.length && <div className="sub" style={{ margin: 0 }}>+ {gueltig.length - sichtbar.length} weitere</div>}
+                {!gueltig.length && "–"}
+              </td>
+              <td><span className={`status ${s.label === "gültig" ? "freigegeben" : s.label === "abgelaufen" ? "" : "entwurf"}`} style={s.label === "abgelaufen" ? { background: "#fdecea", color: "#8a1f15" } : undefined}>{s.label}</span></td>
+              <td>{s.naechsterAblauf ? <FristAmpel datum={s.naechsterAblauf} /> : "–"}</td>
+            </tr>
+          );
+        })}
+        {!gefiltert.length && <tr><td colSpan={7} className="sub">Keine Schweißer gefunden.</td></tr>}
+      </tbody></table>
+
+      <h2>Neuen Schweißer anlegen</h2>
       <ZertifikatUpload />
       <form className="card" action={neu}>
-        <input name="name" placeholder="Name" required /><input name="stamp" placeholder="Stempel" />
+        <input name="name" placeholder="Name" required /><input name="stamp" placeholder="Stempel (Zeichen)" />
+        <input name="birthdate" type="date" title="Geburtsdatum" />
         <input name="process" placeholder="Verfahren (z. B. 135)" /><input name="mg" placeholder="Werkstoffgruppe" />
         <input name="bis" type="date" title="gültig bis" />
         <input name="bezeichnung" placeholder="Genormte Bezeichnung (vom Zertifikat, optional)" style={{ width: "100%" }} />
@@ -95,10 +176,12 @@ export default async function Page() {
         <select name="layerBuild" defaultValue=""><option value="">Lagenaufbau –</option><option value="sl">sl einlagig</option><option value="ml">ml mehrlagig</option></select>
         <button>Anlegen</button>
       </form>
+
+      <h2>Alle Prüfungen (Detailansicht)</h2>
       <table><thead><tr><th>Name</th><th>Stempel</th><th>Prüfungen</th></tr></thead><tbody>
-        {(data ?? []).map((w) => (
+        {schweisser.map((w) => (
           <tr key={w.id}><td>{w.name}</td><td>{w.stamp}</td>
-            <td>{(w.welder_certificates as any[]).map((c, i) => (
+            <td>{(w.certs as any[]).map((c, i) => (
               <div key={i} style={{ marginBottom: 6 }}>
                 <div><code>{c.bezeichnung || pruefbezeichnung(c)}</code> · <FristAmpel datum={c.valid_until} /></div>
                 <div style={{ fontSize: 12, opacity: .8 }}>
