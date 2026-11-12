@@ -173,3 +173,24 @@ const LAGENAUFBAU_SCOPE: Record<string, string[]> = { sl: ["sl"], ml: ["sl", "ml
 export function lagenaufbauGedeckt(testLage: string, jobLage: string): boolean {
   return (LAGENAUFBAU_SCOPE[testLage] ?? [testLage]).includes(jobLage);
 }
+
+// Genormte Prüfungsbezeichnung nach DIN EN ISO 9606-1 (z. B. "141 T BW FM3 S s3,6 D60,3 PH ss nb ml"),
+// aus den rohen Prüfwerten der Bescheinigung zusammengesetzt (keine Normauswertung, nur Formatierung).
+const dezimal = (n: number) => String(n).replace(".", ",");
+export function pruefbezeichnung(c: {
+  process: string; product_type: string | null; joint_type: string | null; fm_group: string | null;
+  filler_type: string | null; test_thickness: number | null; test_diameter: number | null;
+  test_position: string | null; weld_detail: string | null; layer_build: string | null;
+}): string {
+  const teile: string[] = [c.process];
+  if (c.product_type) teile.push(c.product_type);
+  if (c.joint_type) teile.push(c.joint_type);
+  if (c.fm_group) teile.push(c.fm_group);
+  if (c.filler_type) teile.push(c.filler_type);
+  if (c.test_thickness !== null) teile.push((c.joint_type === "FW" ? "t" : "s") + dezimal(c.test_thickness));
+  if (c.product_type === "T" && c.test_diameter !== null) teile.push("D" + dezimal(c.test_diameter));
+  if (c.test_position) teile.push(c.test_position);
+  if (c.weld_detail) teile.push(...c.weld_detail.split("_"));
+  if (c.layer_build) teile.push(c.layer_build);
+  return teile.join(" ");
+}
