@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { ctx } from "@/lib/tenant";
 import { FristAmpel } from "@/components/Ampel";
-import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, type Nahtart, type Produktform } from "@/lib/iso9606";
+import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, pruefbezeichnung, type Nahtart, type Produktform } from "@/lib/iso9606";
 
 // Unendlich (kein Maximum, z. B. Tabelle 7 Fall D > 25) lässt sich nicht speichern -> null.
 const speicherbar = (v: number) => (v === Infinity ? null : v);
@@ -47,7 +47,7 @@ async function neu(fd: FormData) {
       weld_detail: String(fd.get("weldDetail")) || null, layer_build: String(fd.get("layerBuild")) || null,
       thickness_min: tmin, thickness_max: tmax, diameter_min: dmin, diameter_max: dmax, positions,
       has_fillet_test: fd.get("hasFilletTest") === "on", combined_joint_test: fd.get("combinedJointTest") === "on", test_thickness: sOderT,
-      test_diameter: D, fixed_pipe: fd.get("fixedPipe") === "on", rotating_pipe: fd.get("rotatingPipe") === "on",
+      test_diameter: D, test_position: positionRoh, fixed_pipe: fd.get("fixedPipe") === "on", rotating_pipe: fd.get("rotatingPipe") === "on",
       valid_until: String(fd.get("bis")) || null,
     });
   }
@@ -56,7 +56,7 @@ async function neu(fd: FormData) {
 
 export default async function Page() {
   const { sb } = await ctx();
-  const { data } = await sb.from("welders").select("id,name,stamp,welder_certificates(process,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,fixed_pipe,rotating_pipe,valid_until)").order("name");
+  const { data } = await sb.from("welders").select("id,name,stamp,welder_certificates(process,material_group,joint_type,product_type,fm_group,filler_type,weld_detail,layer_build,thickness_min,thickness_max,diameter_min,diameter_max,positions,has_fillet_test,combined_joint_test,test_thickness,test_diameter,test_position,fixed_pipe,rotating_pipe,valid_until)").order("name");
   return (
     <>
       <h1>Schweißer</h1>
@@ -93,12 +93,15 @@ export default async function Page() {
         {(data ?? []).map((w) => (
           <tr key={w.id}><td>{w.name}</td><td>{w.stamp}</td>
             <td>{(w.welder_certificates as any[]).map((c, i) => (
-              <div key={i}>{c.process} / {c.product_type ?? "–"} / {c.joint_type ?? "–"} / {c.material_group ?? "–"} / {c.thickness_min ?? "–"}–{c.thickness_max ?? "–"} mm
-                {" / Ø "}{c.diameter_min ?? "–"}–{c.diameter_max ?? "∞"} mm
-                {" / "}{(c.positions ?? []).join(", ") || "–"}
-                {[c.fm_group, c.filler_type, c.weld_detail, c.layer_build].some(Boolean) && <> / {[c.fm_group, c.filler_type, c.weld_detail, c.layer_build].filter(Boolean).join(" ")}</>}
-                {(c.has_fillet_test || c.combined_joint_test || c.fixed_pipe || c.rotating_pipe) && <> / {[c.has_fillet_test && "+Kehlnaht", c.combined_joint_test && "+kombiniert", c.fixed_pipe && "+festes Rohr", c.rotating_pipe && "+rotierendes Rohr"].filter(Boolean).join(" ")}</>}
-                {" · "}<FristAmpel datum={c.valid_until} /></div>
+              <div key={i} style={{ marginBottom: 6 }}>
+                <div><code>{pruefbezeichnung(c)}</code> · <FristAmpel datum={c.valid_until} /></div>
+                <div style={{ fontSize: 12, opacity: .8 }}>
+                  {c.material_group ?? "–"} / {c.thickness_min ?? "–"}–{c.thickness_max ?? "–"} mm
+                  {" / Ø "}{c.diameter_min ?? "–"}–{c.diameter_max ?? "∞"} mm
+                  {" / "}{(c.positions ?? []).join(", ") || "–"}
+                  {(c.has_fillet_test || c.combined_joint_test || c.fixed_pipe || c.rotating_pipe) && <> / {[c.has_fillet_test && "+Kehlnaht", c.combined_joint_test && "+kombiniert", c.fixed_pipe && "+festes Rohr", c.rotating_pipe && "+rotierendes Rohr"].filter(Boolean).join(" ")}</>}
+                </div>
+              </div>
             ))}</td></tr>
         ))}
       </tbody></table>

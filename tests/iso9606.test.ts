@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope } from "../lib/iso9606";
+import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, pruefbezeichnung } from "../lib/iso9606";
 
 describe("ISO 9606-1 Normrechner: Dicke", () => {
   it("BW s < 3mm: Bereich s bis max(3, 2s)", () => expect(bwThicknessRange(2, ["135"])).toEqual({ min: 2, max: 4 }));
@@ -35,4 +35,31 @@ describe("ISO 9606-1 Normrechner: Position (Tabelle 9/10 + Abschnitt 5.8)", () =
   it("ohne 5.8-Zusatzbedingungen keine Erweiterung bei Blech", () => expect(positionScope({
     nahtart: "BW", produkt: "P", position: "PH", durchmesser: 200, hatPC: true, mehrfachlage: true, richtung: "steigend",
   }).sort()).toEqual(["PA", "PE", "PF"].sort()));
+});
+
+describe("ISO 9606-1: genormte Prüfungsbezeichnung", () => {
+  it("Rohr BW mit FM-Gruppe, Zusatzart, Dicke, Durchmesser, Position, Detail, Lagenaufbau", () => {
+    expect(pruefbezeichnung({
+      process: "141", product_type: "T", joint_type: "BW", fm_group: "FM3", filler_type: "S",
+      test_thickness: 3.6, test_diameter: 60.3, test_position: "PH", weld_detail: "ss_nb", layer_build: "ml",
+    })).toBe("141 T BW FM3 S s3,6 D60,3 PH ss nb ml");
+  });
+  it("Kehlnaht nutzt t- statt s-Präfix für die Dicke", () => {
+    expect(pruefbezeichnung({
+      process: "135", product_type: "P", joint_type: "FW", fm_group: null, filler_type: null,
+      test_thickness: 8, test_diameter: null, test_position: null, weld_detail: null, layer_build: null,
+    })).toBe("135 P FW t8");
+  });
+  it("Blech: Durchmesser wird nicht angehängt, auch wenn vorhanden", () => {
+    expect(pruefbezeichnung({
+      process: "135", product_type: "P", joint_type: "BW", fm_group: null, filler_type: null,
+      test_thickness: 5, test_diameter: 100, test_position: null, weld_detail: null, layer_build: null,
+    })).toBe("135 P BW s5");
+  });
+  it("nur Pflichtfeld Verfahren vorhanden", () => {
+    expect(pruefbezeichnung({
+      process: "111", product_type: null, joint_type: null, fm_group: null, filler_type: null,
+      test_thickness: null, test_diameter: null, test_position: null, weld_detail: null, layer_build: null,
+    })).toBe("111");
+  });
 });
