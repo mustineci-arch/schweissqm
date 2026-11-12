@@ -33,8 +33,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (p.bemerkung) line(`Bemerkung: ${p.bemerkung}`);
   y -= 30;
   line(`Ort, Datum: ${settings?.ort_unterschrift ?? "_______________"}, ${new Date().toISOString().slice(0, 10)}`);
-  y -= 20;
-  line("Unterschrift Schweißaufsichtsperson: _______________________________");
+  y -= 10;
+  line("Unterschrift Schweißaufsichtsperson:");
+
+  if (settings?.unterschrift_pfad) {
+    const { data: bild } = await sb.storage.from("dokumente").download(settings.unterschrift_pfad);
+    if (bild) {
+      const bytes = new Uint8Array(await bild.arrayBuffer());
+      const bild_ = settings.unterschrift_pfad.toLowerCase().endsWith(".png") ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+      const breite = 140, hoehe = (bild_.height / bild_.width) * breite;
+      page.drawImage(bild_, { x: L, y: y - hoehe, width: breite, height: hoehe });
+      y -= hoehe + 10;
+    }
+  } else {
+    line("_______________________________");
+  }
 
   const bytes = await doc.save();
   return new Response(Buffer.from(bytes), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="ap-protokoll-${p.ap_datum}.pdf"` } });

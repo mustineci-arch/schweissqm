@@ -16,9 +16,39 @@ async function speichern(fd: FormData) {
   revalidatePath("/wpqr/einstellungen");
 }
 
+async function unterschriftHochladen(fd: FormData) {
+  "use server";
+  const { sb, tenantId } = await ctx();
+  if (!tenantId) return;
+  const file = fd.get("file") as File | null;
+  if (!file || !file.size) return;
+  const { data: alt } = await sb.from("tenant_settings").select("unterschrift_pfad").eq("tenant_id", tenantId).maybeSingle();
+  if (alt?.unterschrift_pfad) await sb.storage.from("dokumente").remove([alt.unterschrift_pfad]);
+  const pfad = `${tenantId}/unterschrift/${Date.now()}-${file.name}`;
+  const { error } = await sb.storage.from("dokumente").upload(pfad, file, { contentType: file.type || undefined });
+  if (!error) await sb.from("tenant_settings").upsert({ tenant_id: tenantId, unterschrift_pfad: pfad });
+  revalidatePath("/wpqr/einstellungen");
+}
+
+async function unterschriftEntfernen(fd: FormData) {
+  "use server";
+  const { sb, tenantId } = await ctx();
+  if (!tenantId) return;
+  const pfad = String(fd.get("pfad"));
+  await sb.storage.from("dokumente").remove([pfad]);
+  await sb.from("tenant_settings").update({ unterschrift_pfad: null }).eq("tenant_id", tenantId);
+  revalidatePath("/wpqr/einstellungen");
+}
+
 export default async function Einstellungen() {
   const { sb } = await ctx();
   const { data: s } = await sb.from("tenant_settings").select("*").maybeSingle();
+  let unterschriftUrl: string | null = null;
+  if (s?.unterschrift_pfad) {
+    const { data } = await sb.storage.from("dokumente").createSignedUrl(s.unterschrift_pfad, 3600);
+    unterschriftUrl = data?.signedUrl ?? null;
+  }
+
   return (
     <>
       <p className="sub"><Link href="/wpqr">← Zur WPQR-Liste</Link></p>
@@ -31,7 +61,19 @@ export default async function Einstellungen() {
         <input name="ap_intervall_monate" type="number" defaultValue={s?.ap_intervall_monate ?? 6} placeholder="Intervall Arbeitsprüfung [Monate]" />
         <button>Einstellungen speichern</button>
       </form>
-      <p className="hinweis">Digitale Unterschrift (Bild-Upload) ist noch nicht umgesetzt – folgt in einer späteren Runde.</p>
+
+      <h2>Digitale Unterschrift</h2>
+      <p className="sub">Bild der Unterschrift der Schweißaufsichtsperson (PNG/JPG). Wird auf allen Geräten verwendet.</p>
+      {unterschriftUrl && (
+        <div className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img src={unterschriftUrl} alt="Unterschrift" style={{ maxHeight: 60 }} />
+          <form action={unterschriftEntfernen}><input type="hidden" name="pfad" value={s!.unterschrift_pfad} /><button className="sek">Entfernen</button></form>
+        </div>
+      )}
+      <form className="card" action={unterschriftHochladen}>
+        <input type="file" name="file" accept="image/png,image/jpeg" required />
+        <button>🖊 Unterschrift-Bild wählen</button>
+      </form>
     </>
   );
 }
