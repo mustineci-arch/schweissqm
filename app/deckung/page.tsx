@@ -32,7 +32,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
           </section>
         );
       })}
-      <p style={{ marginTop: 16 }}>Hinweis: Geltungsbereiche nach Norm (z. B. ISO 15614-1) sind noch nicht als validiertes Regelset hinterlegt und bleiben NICHT_BEWERTBAR. Keine Freigabe ohne Prüfung durch die Schweißaufsicht.</p>
+      <p style={{ marginTop: 16 }}>Hinweis: Verfahren, Werkstoffgruppe, Produktform, Nahtart, Dicke, Position, Durchmesser, FM-Gruppe, Schweißzusatzart, Schweißdetail und Lagenaufbau werden gegen die beim Schweißer hinterlegte Prüfung verglichen (Geltungsbereich nach DIN EN ISO 9606-1, siehe Normrechner auf der Schweißer-Seite). Die letzten vier sind optional und erscheinen nur, wenn die WPS sie fordert. Die Elektrodenumhüllung bei Prozess 111 ist noch nicht abgebildet. Der WPS-gegen-WPQR-Vergleich (z. B. ISO 15614-1) ist noch nicht als validiertes Regelset hinterlegt und bleibt NICHT_BEWERTBAR. Keine Freigabe ohne Prüfung durch die Schweißaufsicht.</p>
     </>
   );
 }

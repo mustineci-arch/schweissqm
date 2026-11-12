@@ -10,6 +10,8 @@ function lies(fd: FormData) {
   const pos = (t("positions") ?? "").split(/[\s,;]+/).map((x) => x.toUpperCase()).filter(Boolean);
   return {
     process: t("process"), joint_type: t("joint_type"), material_group: t("material_group"),
+    product_type: t("product_type"), fm_group: t("fm_group"), filler_type: t("filler_type"),
+    weld_detail: t("weld_detail"), layer_build: t("layer_build"),
     thickness_min: n("thickness_min"), thickness_max: n("thickness_max"), diameter_min: n("diameter_min"),
     positions: pos, filler: t("filler"), shielding_gas: t("shielding_gas"), heat_input_max: n("heat_input_max"),
     origin: {},
@@ -83,12 +85,19 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         <label className="f" id="joint_type">Nahtart<select name="joint_type" defaultValue={r.joint_type ?? ""} disabled={!edit}><option value="">–</option><option>BW</option><option>FW</option></select></label>
         {feld("material_group", "Werkstoffgruppe", r.material_group)}
         {feld("positions", "Positionen (z. B. PA, PC)", (r.positions ?? []).join(", "))}
+        <label className="f" id="product_type">Produktform (optional)<select name="product_type" defaultValue={r.product_type ?? ""} disabled={!edit}><option value="">–</option><option value="P">P Blech</option><option value="T">T Rohr</option></select></label>
       </div></div>
       <div className="card"><h2 style={{ marginTop: 0 }}>Bereiche</h2><div className="grid2">
         {feld("thickness_min", "Dicke min (mm)", r.thickness_min, { type: "number", step: "0.1" })}
         {feld("thickness_max", "Dicke max (mm)", r.thickness_max, { type: "number", step: "0.1" })}
         {feld("diameter_min", "Durchmesser min (mm)", r.diameter_min, { type: "number", step: "0.1" })}
         {feld("heat_input_max", "Wärmeeinbringung max (kJ/mm)", r.heat_input_max, { type: "number", step: "0.01" })}
+      </div></div>
+      <div className="card"><h2 style={{ marginTop: 0 }}>Weitere Kriterien (optional, nur nötig wenn gefordert)</h2><div className="grid2">
+        <label className="f" id="fm_group">FM-Gruppe<select name="fm_group" defaultValue={r.fm_group ?? ""} disabled={!edit}><option value="">–</option>{["FM1", "FM2", "FM3", "FM4", "FM5", "FM6"].map((x) => <option key={x}>{x}</option>)}</select></label>
+        <label className="f" id="filler_type">Schweißzusatzart<select name="filler_type" defaultValue={r.filler_type ?? ""} disabled={!edit}><option value="">–</option>{["S", "M", "B", "R", "PZ", "V", "W", "Y", "Z", "C"].map((x) => <option key={x}>{x}</option>)}</select></label>
+        <label className="f" id="weld_detail">Schweißdetail<select name="weld_detail" defaultValue={r.weld_detail ?? ""} disabled={!edit}><option value="">–</option>{["ss_nb", "ss_mb", "bs", "ss_gb", "ci", "ss_fb"].map((x) => <option key={x}>{x}</option>)}</select></label>
+        <label className="f" id="layer_build">Lagenaufbau<select name="layer_build" defaultValue={r.layer_build ?? ""} disabled={!edit}><option value="">–</option><option value="sl">sl einlagig</option><option value="ml">ml mehrlagig</option></select></label>
       </div></div>
       <div className="card"><h2 style={{ marginTop: 0 }}>Zusatz und Gas</h2><div className="grid2">
         {feld("filler", "Zusatzwerkstoff", r.filler)}
