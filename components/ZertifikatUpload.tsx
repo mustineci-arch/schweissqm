@@ -29,6 +29,10 @@ function setzeFormularWerte(form: HTMLFormElement, werte: ReturnType<typeof zuFo
   setzen("dmin", werte.diameter_min);
   setzen("dmax", werte.diameter_max);
   if (werte.positions?.length) setzen("positions", werte.positions.join(", "));
+  setzen("fmGroup", werte.fmGroup);
+  setzen("fillerType", werte.fillerType);
+  setzen("weldDetail", werte.weldDetail);
+  setzen("layerBuild", werte.layerBuild);
 }
 
 export function ZertifikatUpload({ formSelector = "form.card" }: { formSelector?: string }) {

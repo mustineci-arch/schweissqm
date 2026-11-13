@@ -175,6 +175,16 @@ describe("zuFormular(): Fallback aus der Bezeichnung, wenn die Einzelfelder fehl
     // Position/Produktform wurden nicht aus den Einzelfeldern gesetzt -> dürfen aus der Bezeichnung kommen
     expect(f.position_roh).toBe("PH");
   });
+
+  it("leitet FM-Gruppe/Schweißzusatzart/Schweißdetail aus der Bezeichnung ab (steht nirgends als eigenes PDF-Feld)", () => {
+    const f = zuFormular(leer);
+    expect(f).toMatchObject({ fmGroup: "FM5", fillerType: "S", weldDetail: "ss_gb" });
+  });
+
+  it("leitet Lagenaufbau aus der Bezeichnung ab, falls vorhanden", () => {
+    const f = zuFormular({ ...leer, bezeichnung: "ISO 9606-1 141 T BW FM3 S s3,6 D60,3 PH ss nb ml" });
+    expect(f).toMatchObject({ fmGroup: "FM3", fillerType: "S", weldDetail: "ss_nb", layerBuild: "ml" });
+  });
 });
 
 describe("zuFormular(): vom Zertifikat selbst ausgewiesener Geltungsbereich hat Vorrang vor Neuberechnung aus dem Prüfstück", () => {
