@@ -185,37 +185,39 @@ export default async function SchweisserDetail({ params }: { params: Promise<{ i
 
       <h3>PDF für diesen Schweißer einlesen</h3>
       <ZertifikatUpload formSelector="form.zert-neu" />
-      <h3>Zertifikat ohne PDF hinzufügen</h3>
-      <form className="card zert-neu" action={zertifikatHinzufuegen}>
-        <input type="hidden" name="welder_id" value={w.id} />
-        <input name="cert_no" placeholder="Zertifikat-Nr." /><input name="bis" type="date" title="gültig bis" />
-        <input name="bezeichnung" placeholder="Bezeichnung (ISO 9606-1 …)" style={{ width: "100%" }} />
-        <input name="issued_on" type="date" title="Datum der Prüfung" />
-        <input name="verlaengerung_nach" placeholder="Verlängerung nach (z. B. 9.3 a)" />
-        <p className="sub" style={{ margin: "8px 0 4px" }}>Manuell (überschreibt den Normrechner unten, falls dort nichts ausgefüllt ist):</p>
-        <input name="tmin" type="number" step="0.1" placeholder="Dicke min" /><input name="tmax" type="number" step="0.1" placeholder="Dicke max" />
-        <input name="dmin" type="number" step="0.1" placeholder="Durchmesser min" /><input name="dmax" type="number" step="0.1" placeholder="Durchmesser max" />
-        <input name="positions" placeholder="Positionen (z. B. PA, PC)" />
-        <p className="sub" style={{ margin: "8px 0 4px" }}>Normrechner nach DIN EN ISO 9606-1 (berechnet Dicke/Durchmesser/Position aus der Prüfbezeichnung):</p>
-        <input name="process" placeholder="Verfahren (z. B. 135)" /><input name="mg" placeholder="Werkstoffgruppe" />
-        <select name="nahtart" defaultValue=""><option value="">Nahtart –</option><option value="BW">BW Stumpfnaht</option><option value="FW">FW Kehlnaht</option></select>
-        <select name="produkt" defaultValue=""><option value="">Produktform –</option><option value="P">P Blech</option><option value="T">T Rohr</option></select>
-        <input name="s_oder_t" type="number" step="0.1" placeholder="Prüfstückdicke s/t (mm)" />
-        <input name="durchmesser" type="number" step="0.1" placeholder="Rohr-Ø D der Prüfung (mm)" />
-        <input name="position_roh" placeholder="Prüfposition (z. B. PH)" />
-        <label style={{ fontSize: 13 }}><input type="checkbox" name="hatPC" /> Zusatzprüfung PC vorhanden</label>
-        <label style={{ fontSize: 13 }}><input type="checkbox" name="mehrfachlage" /> 2/3+1/3-Umfangsprüfung</label>
-        <select name="richtung" defaultValue="steigend"><option value="steigend">steigend</option><option value="fallend">fallend</option></select>
-        <label style={{ fontSize: 13 }}><input type="checkbox" name="hasFilletTest" /> Zusatzprüfung Kehlnaht vorhanden</label>
-        <label style={{ fontSize: 13 }}><input type="checkbox" name="combinedJointTest" /> kombinierte BW/FW-Prüfung</label>
-        <label style={{ fontSize: 13 }}><input type="checkbox" name="fixedPipe" /> Blechprüfung: qualifiziert fest eingespanntes Rohr</label>
-        <label style={{ fontSize: 13 }}><input type="checkbox" name="rotatingPipe" /> Blechprüfung: qualifiziert rotierendes Rohr</label>
-        <select name="fmGroup" defaultValue=""><option value="">FM-Gruppe –</option>{["FM1", "FM2", "FM3", "FM4", "FM5", "FM6"].map((x) => <option key={x}>{x}</option>)}</select>
-        <select name="fillerType" defaultValue=""><option value="">Schweißzusatzart –</option>{["S", "M", "B", "R", "PZ", "V", "W", "Y", "Z", "C"].map((x) => <option key={x}>{x}</option>)}</select>
-        <select name="weldDetail" defaultValue=""><option value="">Schweißdetail –</option>{["ss_nb", "ss_mb", "bs", "ss_gb", "ci", "ss_fb"].map((x) => <option key={x}>{x}</option>)}</select>
-        <select name="layerBuild" defaultValue=""><option value="">Lagenaufbau –</option><option value="sl">sl einlagig</option><option value="ml">ml mehrlagig</option></select>
-        <button>Zertifikat speichern</button>
-      </form>
+      <details style={{ marginTop: 10 }}>
+        <summary>Zertifikat ohne PDF hinzufügen</summary>
+        <form className="card zert-neu" action={zertifikatHinzufuegen} style={{ marginTop: 8 }}>
+          <input type="hidden" name="welder_id" value={w.id} />
+          <input name="cert_no" placeholder="Zertifikat-Nr." /><input name="bis" type="date" title="gültig bis" />
+          <input name="bezeichnung" placeholder="Bezeichnung (ISO 9606-1 …)" style={{ width: "100%" }} />
+          <input name="issued_on" type="date" title="Datum der Prüfung" />
+          <input name="verlaengerung_nach" placeholder="Verlängerung nach (z. B. 9.3 a)" />
+          <p className="sub" style={{ margin: "8px 0 4px" }}>Manuell (überschreibt den Normrechner unten, falls dort nichts ausgefüllt ist):</p>
+          <input name="tmin" type="number" step="0.1" placeholder="Dicke min" /><input name="tmax" type="number" step="0.1" placeholder="Dicke max" />
+          <input name="dmin" type="number" step="0.1" placeholder="Durchmesser min" /><input name="dmax" type="number" step="0.1" placeholder="Durchmesser max" />
+          <input name="positions" placeholder="Positionen (z. B. PA, PC)" />
+          <p className="sub" style={{ margin: "8px 0 4px" }}>Normrechner nach DIN EN ISO 9606-1 (berechnet Dicke/Durchmesser/Position aus der Prüfbezeichnung):</p>
+          <input name="process" placeholder="Verfahren (z. B. 135)" /><input name="mg" placeholder="Werkstoffgruppe" />
+          <select name="nahtart" defaultValue=""><option value="">Nahtart –</option><option value="BW">BW Stumpfnaht</option><option value="FW">FW Kehlnaht</option></select>
+          <select name="produkt" defaultValue=""><option value="">Produktform –</option><option value="P">P Blech</option><option value="T">T Rohr</option></select>
+          <input name="s_oder_t" type="number" step="0.1" placeholder="Prüfstückdicke s/t (mm)" />
+          <input name="durchmesser" type="number" step="0.1" placeholder="Rohr-Ø D der Prüfung (mm)" />
+          <input name="position_roh" placeholder="Prüfposition (z. B. PH)" />
+          <label style={{ fontSize: 13 }}><input type="checkbox" name="hatPC" /> Zusatzprüfung PC vorhanden</label>
+          <label style={{ fontSize: 13 }}><input type="checkbox" name="mehrfachlage" /> 2/3+1/3-Umfangsprüfung</label>
+          <select name="richtung" defaultValue="steigend"><option value="steigend">steigend</option><option value="fallend">fallend</option></select>
+          <label style={{ fontSize: 13 }}><input type="checkbox" name="hasFilletTest" /> Zusatzprüfung Kehlnaht vorhanden</label>
+          <label style={{ fontSize: 13 }}><input type="checkbox" name="combinedJointTest" /> kombinierte BW/FW-Prüfung</label>
+          <label style={{ fontSize: 13 }}><input type="checkbox" name="fixedPipe" /> Blechprüfung: qualifiziert fest eingespanntes Rohr</label>
+          <label style={{ fontSize: 13 }}><input type="checkbox" name="rotatingPipe" /> Blechprüfung: qualifiziert rotierendes Rohr</label>
+          <select name="fmGroup" defaultValue=""><option value="">FM-Gruppe –</option>{["FM1", "FM2", "FM3", "FM4", "FM5", "FM6"].map((x) => <option key={x}>{x}</option>)}</select>
+          <select name="fillerType" defaultValue=""><option value="">Schweißzusatzart –</option>{["S", "M", "B", "R", "PZ", "V", "W", "Y", "Z", "C"].map((x) => <option key={x}>{x}</option>)}</select>
+          <select name="weldDetail" defaultValue=""><option value="">Schweißdetail –</option>{["ss_nb", "ss_mb", "bs", "ss_gb", "ci", "ss_fb"].map((x) => <option key={x}>{x}</option>)}</select>
+          <select name="layerBuild" defaultValue=""><option value="">Lagenaufbau –</option><option value="sl">sl einlagig</option><option value="ml">ml mehrlagig</option></select>
+          <button>Zertifikat speichern</button>
+        </form>
+      </details>
     </>
   );
 }
