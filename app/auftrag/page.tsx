@@ -77,10 +77,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ a
 
       <h2>Aufträge</h2>
       <table><thead><tr><th>Bezeichnung</th><th>Verfahren</th><th>Nahtart</th><th>Werkstoff</th><th>Dicke</th><th>Ø</th><th>Position</th><th>Prüfen</th></tr></thead><tbody>
-        {A.map((a) => (
-          <tr key={a.id}><td>{a.bezeichnung ?? "–"}</td><td>{a.process}</td><td>{a.joint_type ?? "–"}</td><td>{a.material_group ?? "–"}</td><td>{a.thickness ?? "–"}</td><td>{a.diameter ?? "–"}</td><td>{a.position ?? "–"}</td>
-            <td><Link href={`/auftrag?auftrag=${a.id}${sp.cert ? `&cert=${sp.cert}` : ""}`}>auswählen</Link></td></tr>
-        ))}
+        {A.map((a) => {
+          const weitere = [a.fm_group, a.filler_type, a.weld_detail, a.layer_build].filter(Boolean).join(" · ");
+          return (
+            <tr key={a.id}>
+              <td>{a.bezeichnung ?? "–"}{weitere && <div className="sub">{weitere}</div>}</td>
+              <td>{a.process}</td><td>{a.joint_type ?? "–"}</td><td>{a.material_group ?? "–"}</td><td>{a.thickness ?? "–"}</td><td>{a.diameter ?? "–"}</td><td>{a.position ?? "–"}</td>
+              <td><Link href={`/auftrag?auftrag=${a.id}${sp.cert ? `&cert=${sp.cert}` : ""}`}>auswählen</Link></td>
+            </tr>
+          );
+        })}
         {A.length === 0 && <tr><td colSpan={8}>Noch keine Aufträge.</td></tr>}
       </tbody></table>
 
