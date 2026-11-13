@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, pruefbezeichnung } from "../lib/iso9606";
+import { bwThicknessRange, fwThicknessRange, diameterRange, positionScope, pruefbezeichnung, geltungsbereichAufschluesseln } from "../lib/iso9606";
 
 describe("ISO 9606-1 Normrechner: Dicke", () => {
   it("BW s < 3mm: Bereich s bis max(3, 2s)", () => expect(bwThicknessRange(2, ["135"])).toEqual({ min: 2, max: 4 }));
@@ -61,5 +61,52 @@ describe("ISO 9606-1: genormte Prüfungsbezeichnung", () => {
       process: "111", product_type: null, joint_type: null, fm_group: null, filler_type: null,
       test_thickness: null, test_diameter: null, test_position: null, weld_detail: null, layer_build: null,
     })).toBe("111");
+  });
+});
+
+describe("ISO 9606-1: vollständigen Geltungsbereich aufschlüsseln", () => {
+  const basis = {
+    process: "141", material_group: "1.3", product_type: "T" as const, joint_type: "BW" as const,
+    thickness_min: 3, thickness_max: 16, diameter_min: 25, diameter_max: null,
+    positions: ["PA", "PC"], fm_group: "FM3", filler_type: "S", weld_detail: "ss_nb", layer_build: "ml",
+  };
+
+  it("Verfahren und Werkstoffgruppe zeigen die zusätzlich abgedeckten Werte (Äquivalenz-/Qualifikationsregeln)", () => {
+    const g = geltungsbereichAufschluesseln(basis);
+    expect(g.verfahren).toEqual({ geprueft: "141", decktAuch: ["141", "143", "145"] });
+    expect(g.werkstoffgruppe).toEqual({ geprueft: "1.3", decktAuch: ["1.1", "1.2", "1.3", "2.1"] });
+  });
+
+  it("Dicke/Durchmesser/Positionen werden unverändert aus den gespeicherten Bereichen übernommen", () => {
+    const g = geltungsbereichAufschluesseln(basis);
+    expect(g.dicke).toEqual({ min: 3, max: 16 });
+    expect(g.durchmesser).toEqual({ min: 25, max: null });
+    expect(g.positionen).toEqual(["PA", "PC"]);
+  });
+
+  it("FM-Gruppe/Schweißzusatzart/Schweißdetail/Lagenaufbau zeigen ebenfalls die Qualifikationsmatrix", () => {
+    const g = geltungsbereichAufschluesseln(basis);
+    expect(g.fmGruppe).toEqual({ geprueft: "FM3", decktAuch: ["FM1", "FM2", "FM3"] });
+    expect(g.schweisszusatzart).toEqual({ geprueft: "S", decktAuch: ["S", "M"] });
+    expect(g.schweissdetail).toEqual({ geprueft: "ss_nb", decktAuch: ["ss_nb", "ss_mb", "bs", "ss_gb", "ss_fb"] });
+    expect(g.lagenaufbau).toEqual({ geprueft: "ml", decktAuch: ["sl", "ml"] });
+  });
+
+  it("fehlende optionale Felder (null) ergeben null statt eines Eintrags", () => {
+    const g = geltungsbereichAufschluesseln({
+      process: "135", material_group: null, product_type: null, joint_type: null,
+      thickness_min: null, thickness_max: null, diameter_min: null, diameter_max: null,
+      positions: null, fm_group: null, filler_type: null, weld_detail: null, layer_build: null,
+    });
+    expect(g.werkstoffgruppe).toBeNull();
+    expect(g.dicke).toBeNull();
+    expect(g.durchmesser).toBeNull();
+    expect(g.positionen).toBeNull();
+    expect(g.fmGruppe).toBeNull();
+  });
+
+  it("unbekannter Wert ohne Eintrag in der Matrix deckt nur sich selbst ab", () => {
+    const g = geltungsbereichAufschluesseln({ ...basis, process: "999" });
+    expect(g.verfahren).toEqual({ geprueft: "999", decktAuch: ["999"] });
   });
 });

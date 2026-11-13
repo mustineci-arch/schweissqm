@@ -6,7 +6,7 @@ import { FristAmpel } from "@/components/Ampel";
 import { ZertifikatUpload } from "@/components/ZertifikatUpload";
 import { ampel, bestaetigungFaellig } from "@/lib/fristen";
 import { zertifikatFelderAusFormular } from "@/lib/cert-save";
-import { pruefbezeichnung } from "@/lib/iso9606";
+import { pruefbezeichnung, geltungsbereichAufschluesseln } from "@/lib/iso9606";
 
 async function stammdatenSpeichern(fd: FormData) {
   "use server";
@@ -98,6 +98,7 @@ export default async function SchweisserDetail({ params }: { params: Promise<{ i
       </form>
 
       <h2>Qualifikationen (Geltungsbereich)</h2>
+      <p className="sub">Genau die Regeln, die auch die Deckungsprüfung anwendet – „deckt auch" zeigt, was über Äquivalenz-/Qualifikationsregeln zusätzlich abgedeckt ist, auch wenn es nicht wörtlich auf dem Zeugnis steht.</p>
       <table><thead><tr><th>Bezeichnung</th><th>Werkstoffgruppe</th><th>Dicke</th><th>Durchmesser</th><th>Positionen</th></tr></thead><tbody>
         {certs.filter((c) => ["gruen", "gelb"].includes(ampel(c.valid_until).farbe)).map((c) => (
           <tr key={c.id}>
@@ -110,6 +111,31 @@ export default async function SchweisserDetail({ params }: { params: Promise<{ i
         ))}
         {!certs.some((c) => ["gruen", "gelb"].includes(ampel(c.valid_until).farbe)) && <tr><td colSpan={5} className="sub">Keine gültigen Qualifikationen.</td></tr>}
       </tbody></table>
+
+      {certs.filter((c) => ["gruen", "gelb"].includes(ampel(c.valid_until).farbe)).map((c) => {
+        const g = geltungsbereichAufschluesseln(c);
+        const eintrag = (label: string, e: ReturnType<typeof geltungsbereichAufschluesseln>["verfahren"]) => e && (
+          <tr key={label}><td>{label}</td><td>{e.geprueft}</td><td>{e.decktAuch.length > 1 ? e.decktAuch.join(", ") : <span className="sub">nur sich selbst</span>}</td></tr>
+        );
+        return (
+          <details key={c.id} style={{ marginBottom: 8 }}>
+            <summary>Vollständiger Geltungsbereich – <code>{c.bezeichnung || pruefbezeichnung(c)}</code></summary>
+            <table><thead><tr><th>Kriterium</th><th>Geprüft</th><th>Deckt auch</th></tr></thead><tbody>
+              {eintrag("Verfahren", g.verfahren)}
+              {eintrag("Werkstoffgruppe", g.werkstoffgruppe)}
+              {eintrag("FM-Gruppe", g.fmGruppe)}
+              {eintrag("Schweißzusatzart", g.schweisszusatzart)}
+              {eintrag("Schweißdetail", g.schweissdetail)}
+              {eintrag("Lagenaufbau", g.lagenaufbau)}
+              <tr><td>Produktform</td><td colSpan={2}>{g.produktform === "T" ? "T · Rohr" : g.produktform === "P" ? "P · Blech" : "–"}</td></tr>
+              <tr><td>Nahtart</td><td colSpan={2}>{g.nahtart ?? "–"}</td></tr>
+              <tr><td>Dicke</td><td colSpan={2}>{g.dicke ? `${g.dicke.min} – ${g.dicke.max ?? "∞"} mm` : "–"}</td></tr>
+              <tr><td>Durchmesser</td><td colSpan={2}>{g.durchmesser ? `${g.durchmesser.min} – ${g.durchmesser.max ?? "∞"} mm` : "– (Blech)"}</td></tr>
+              <tr><td>Positionen</td><td colSpan={2}>{g.positionen?.join(", ") ?? "–"}</td></tr>
+            </tbody></table>
+          </details>
+        );
+      })}
 
       <h2>Zertifikate</h2>
       <form action={alleGueltigenBestaetigen} style={{ marginBottom: 8 }}>
