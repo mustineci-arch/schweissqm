@@ -80,7 +80,7 @@ export function positionScope(e: PositionEingabe): string[] {
 // Abschnitt 5.2: Verfahren-Äquivalenzen bei der Prüfung (geprüftes Verfahren qualifiziert auch das
 // gleichwertige Partnerverfahren). Kurzschluss-Übergang (Transfer "D") bei 131/135/138 ist hier NICHT
 // abgebildet, weil schweissqm die Übergangsart der Prüfung aktuell nicht erfasst.
-const PROZESS_AEQUIVALENZ: Record<string, string[]> = {
+export const PROZESS_AEQUIVALENZ: Record<string, string[]> = {
   "135": ["135", "138"], "138": ["135", "138"],
   "121": ["121", "125"], "125": ["121", "125"],
   "141": ["141", "143", "145"], "143": ["141", "143", "145"], "145": ["141", "143", "145"],
@@ -140,7 +140,7 @@ export function produktformGedeckt(e: ProduktformEingabe): boolean {
 }
 
 // Tabelle 2/3: FM-Gruppe des Zusatzwerkstoffs (geprüfte Gruppe qualifiziert "leichtere" Gruppen).
-const FM_SCOPE: Record<string, string[]> = {
+export const FM_SCOPE: Record<string, string[]> = {
   FM1: ["FM1", "FM2"], FM2: ["FM1", "FM2"], FM3: ["FM1", "FM2", "FM3"],
   FM4: ["FM1", "FM2", "FM3", "FM4"], FM5: ["FM5"], FM6: ["FM5", "FM6"],
 };
@@ -149,7 +149,7 @@ export function fmGruppeGedeckt(testFm: string, jobFm: string): boolean {
 }
 
 // Tabelle 5: Schweißzusatzart (Massivdraht/Stab S, Metallpulver M, Fülldrahtgruppen B/R/PZ/V/W/Y/Z, Zellulose C).
-const ZUSATZART_SCOPE: Record<string, string[]> = {
+export const ZUSATZART_SCOPE: Record<string, string[]> = {
   S: ["S", "M"], M: ["S", "M"],
   B: ["B", "R", "PZ", "V", "W", "Y", "Z"], R: ["R", "PZ", "V", "W", "Y", "Z"], PZ: ["R", "PZ", "V", "W", "Y", "Z"],
   V: ["R", "PZ", "V", "W", "Y", "Z"], W: ["R", "PZ", "V", "W", "Y", "Z"], Y: ["R", "PZ", "V", "W", "Y", "Z"], Z: ["R", "PZ", "V", "W", "Y", "Z"],
@@ -160,7 +160,7 @@ export function zusatzartGedeckt(testZusatzart: string, jobZusatzart: string): b
 }
 
 // Tabelle 11: Schweißdetail (ss_nb einseitig ohne Badsicherung, ss_mb mit Badsicherung, bs beidseitig, ...).
-const DETAIL_SCOPE: Record<string, string[]> = {
+export const DETAIL_SCOPE: Record<string, string[]> = {
   ss_nb: ["ss_nb", "ss_mb", "bs", "ss_gb", "ss_fb"], ss_mb: ["ss_mb", "bs"], bs: ["ss_mb", "bs"],
   ss_gb: ["ss_mb", "bs", "ss_gb"], ci: ["ss_mb", "bs", "ci"], ss_fb: ["ss_mb", "bs", "ss_fb"],
 };
@@ -169,7 +169,7 @@ export function schweissdetailGedeckt(testDetail: string, jobDetail: string): bo
 }
 
 // Tabelle 12: Lagenaufbau (mehrlagig sl qualifiziert auch mehrlagig ml nicht automatisch umgekehrt).
-const LAGENAUFBAU_SCOPE: Record<string, string[]> = { sl: ["sl"], ml: ["sl", "ml"] };
+export const LAGENAUFBAU_SCOPE: Record<string, string[]> = { sl: ["sl"], ml: ["sl", "ml"] };
 export function lagenaufbauGedeckt(testLage: string, jobLage: string): boolean {
   return (LAGENAUFBAU_SCOPE[testLage] ?? [testLage]).includes(jobLage);
 }
@@ -193,4 +193,48 @@ export function pruefbezeichnung(c: {
   if (c.weld_detail) teile.push(...c.weld_detail.split("_"));
   if (c.layer_build) teile.push(c.layer_build);
   return teile.join(" ");
+}
+
+// Schlüsselt eine Schweißerprüfung in ihren vollständigen Geltungsbereich auf: nicht nur die
+// gespeicherten Rohwerte, sondern alles, was die Prüfung nach den Äquivalenz-/Qualifikations-
+// regeln zusätzlich mit abdeckt (z. B. 141 deckt auch 143/145, Werkstoffgruppe 1.3 deckt auch
+// 1.1/1.2/2.1 ab). Nutzt exakt dieselben Funktionen/Tabellen wie schweisserGegenWps() in
+// deckung.ts, damit diese Übersicht und die tatsächliche Deckungsprüfung nie auseinanderlaufen.
+export type GeltungsbereichEintrag = { geprueft: string; decktAuch: string[] };
+export type VollstaendigerGeltungsbereich = {
+  verfahren: GeltungsbereichEintrag | null;
+  werkstoffgruppe: GeltungsbereichEintrag | null;
+  produktform: Produktform | null;
+  nahtart: Nahtart | null;
+  dicke: Bereich | null;
+  durchmesser: Bereich | null;
+  positionen: string[] | null;
+  fmGruppe: GeltungsbereichEintrag | null;
+  schweisszusatzart: GeltungsbereichEintrag | null;
+  schweissdetail: GeltungsbereichEintrag | null;
+  lagenaufbau: GeltungsbereichEintrag | null;
+};
+
+export function geltungsbereichAufschluesseln(cert: {
+  process: string | null; material_group: string | null; product_type: string | null; joint_type: string | null;
+  thickness_min: number | null; thickness_max: number | null; diameter_min: number | null; diameter_max: number | null;
+  positions: string[] | null; fm_group: string | null; filler_type: string | null;
+  weld_detail: string | null; layer_build: string | null;
+}): VollstaendigerGeltungsbereich {
+  const eintrag = (geprueft: string | null, scope: Record<string, string[]>): GeltungsbereichEintrag | null =>
+    geprueft ? { geprueft, decktAuch: scope[geprueft] ?? [geprueft] } : null;
+
+  return {
+    verfahren: eintrag(cert.process, PROZESS_AEQUIVALENZ),
+    werkstoffgruppe: eintrag(cert.material_group, WERKSTOFFGRUPPEN_QUALIFIKATION),
+    produktform: (cert.product_type as Produktform) ?? null,
+    nahtart: (cert.joint_type as Nahtart) ?? null,
+    dicke: cert.thickness_min !== null ? { min: cert.thickness_min, max: cert.thickness_max } : null,
+    durchmesser: cert.diameter_min !== null ? { min: cert.diameter_min, max: cert.diameter_max } : null,
+    positionen: cert.positions && cert.positions.length ? cert.positions : null,
+    fmGruppe: eintrag(cert.fm_group, FM_SCOPE),
+    schweisszusatzart: eintrag(cert.filler_type, ZUSATZART_SCOPE),
+    schweissdetail: eintrag(cert.weld_detail, DETAIL_SCOPE),
+    lagenaufbau: eintrag(cert.layer_build, LAGENAUFBAU_SCOPE),
+  };
 }
