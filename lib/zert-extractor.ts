@@ -189,20 +189,26 @@ function fillTuevThueringen(d: Zertifikat, text: string) {
 
   d.schweisszusatzgruppe = re("19\\s+Filler\\s+material\\s+group.*?\\s+(\\w+)\\s", text);
 
-  const m27 = /27\s+\w+[i!]?ng?\s+position.*?\s+(\S+)\s+(.+?)(?:\n|$)/i.exec(text);
+  // "position"/"thickness"/"pipe" tauchen in manchen PDFs dieses Formats (Schriftart-Subsetting-
+  // Fehler des Erstellers) mit vertauschtem i/l auf (z. B. "posltion", "thlckness", "plpe") -
+  // Zeichenklasse [il] statt literalem i macht die Regex robust gegen diese Variante.
+  const m27 = /27\s+\w+[i!]?ng?\s+pos[il]tion.*?\s+(\S+)\s+(.+?)(?:\n|$)/i.exec(text);
   if (m27) { d.schweissposition = m27[1].trim(); d.schweissposition_geltung = m27[2].trim(); }
-  else d.schweissposition = re("27\\s+\\w+[i!]?ng?\\s+position.*?\\s+(\\S+)", text);
+  else d.schweissposition = re("27\\s+\\w+[i!]?ng?\\s+pos[il]tion.*?\\s+(\\S+)", text);
 
-  const m24 = /24\s+Material\s+thickness.*?(?:FW:\s*)?([\d\.,]+(?:\s+to\s+[\d\.,]+)?)/i.exec(text);
-  if (m24) d.werkstoffdicke_t = m24[1].trim();
+  // Nur einen echten Prüfstückwert übernehmen, keinen aus der Geltungsbereich-Spalte: ein mit
+  // ~/≥/>= eingeleiteter Wert (z. B. "FW: ~ 3.00") ist ein offener Bereich, kein Prüfstückmaß -
+  // das Prüfstück-Feld ist in dem Fall leer ("-") und wird NICHT befüllt.
+  const m24 = /24\s+Material\s+th[il]ckness.*?(?:FW:\s*)?(~|≥|>=)?\s*([\d\.,]+(?:\s+to\s+[\d\.,]+)?)/i.exec(text);
+  if (m24 && !m24[1]) d.werkstoffdicke_t = m24[2].trim();
 
-  const m25 = /25\s+Deposited\s+thickness.*?\s+([\d\.]+)\s+\([^)]+\)\s+(.+?)(?:\n|$)/i.exec(text);
+  const m25 = /25\s+Deposited\s+th[il]ckness.*?\s+([\d\.]+)\s+\([^)]+\)\s+(.+?)(?:\n|$)/i.exec(text);
   if (m25) { d.schweissgutdicke_s = m25[1].trim(); d.schweissgutdicke_s_g = m25[2].trim(); }
-  else d.schweissgutdicke_s = re("25\\s+Deposited\\s+thickness.*?\\s+([\\d\\.]+)", text);
+  else d.schweissgutdicke_s = re("25\\s+Deposited\\s+th[il]ckness.*?\\s+([\\d\\.]+)", text);
 
-  const m26 = /26\s+Outside\s+pipe\s+diameter.*?\s+([\d\.]+)\s+(.+?)(?:\n|$)/i.exec(text);
+  const m26 = /26\s+Outside\s+p[il]pe\s+diameter.*?\s+([\d\.]+)\s+(.+?)(?:\n|$)/i.exec(text);
   if (m26) { d.rohraussendurchmesser = m26[1].trim(); d.rohraussendurchmesser_g = m26[2].trim(); }
-  else d.rohraussendurchmesser = re("26\\s+Outside\\s+pipe\\s+diameter.*?\\s+([\\d\\.]+)", text);
+  else d.rohraussendurchmesser = re("26\\s+Outside\\s+p[il]pe\\s+diameter.*?\\s+([\\d\\.]+)", text);
 
   d.werkstoff = re("Parent\\s+meta[l1]:\\s*(.+?)\\.?\\s*(?:Filler:|The\\s+requirements|\\n)", text);
   d.zusatz_filler = re("Filler:\\s*(.+?)(?:\\.\\s+The\\s+requirements|\\.\\s*\\n|\\.\\s*$)", text);
