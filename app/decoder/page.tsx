@@ -88,7 +88,7 @@ export default async function Decoder({ searchParams }: { searchParams: Promise<
         </p>
       )}
       <details>
-        <summary className="sub">Hinterlegte Qualifikationsmatrix (bescheinigte Gruppe → abgedeckte Gruppen)</summary>
+        <summary>Hinterlegte Qualifikationsmatrix (bescheinigte Gruppe → abgedeckte Gruppen)</summary>
         <table><thead><tr><th>Bescheinigt</th><th>Deckt ab</th></tr></thead><tbody>
           {Object.entries(WERKSTOFFGRUPPEN_QUALIFIKATION).map(([g, liste]) => (
             <tr key={g}><td>{g}</td><td>{liste.join(", ")}</td></tr>
