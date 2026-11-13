@@ -3,6 +3,8 @@
 // (zert-extractor.js). Unterstützt TÜV NORD, TÜV Thüringen und DVS-Format (textbasierte PDFs,
 // keine Scans/OCR). Reine Text-/Regex-Logik, kein DOM – pdfjs liefert nur die Wort-Positionen.
 
+import { parsePruefbezeichnung } from "./bezeichnung-parser";
+
 export type Wort = { text: string; x0: number; x1: number; top: number; base: number };
 export type Zeile = { y: number; words: Wort[] };
 
@@ -404,6 +406,7 @@ export type FormularWerte = {
   name?: string; process?: string; mg?: string; nahtart?: "BW" | "FW"; produkt?: "P" | "T";
   bezeichnung?: string; s_oder_t?: number; durchmesser?: number; position_roh?: string; bis?: string;
   thickness_min?: number; thickness_max?: number; diameter_min?: number; diameter_max?: number; positions?: string[];
+  fmGroup?: string; fillerType?: string; weldDetail?: string; layerBuild?: "sl" | "ml";
 };
 export function zuFormular(d: Zertifikat): FormularWerte {
   const out: FormularWerte = {};
@@ -463,6 +466,13 @@ function ausBezeichnungErgaenzen(out: FormularWerte, bezeichnung: string) {
     const posM = /\b(PA|PB|PC|PD|PE|PF|PG|PH|PJ|HL045|JL045)\b/i.exec(bezeichnung);
     if (posM) out.position_roh = posM[1].toUpperCase();
   }
+  // FM-Gruppe/Schweißzusatzart/Schweißdetail/Lagenaufbau hat das Zertifikat nirgends als eigenes
+  // Feld, sondern nur codiert in der Bezeichnung selbst (z. B. "... FM1 S s8 D50 PH-L045 ss gb").
+  const geparst = parsePruefbezeichnung(bezeichnung);
+  if (!out.fmGroup && geparst.fmGroup) out.fmGroup = geparst.fmGroup;
+  if (!out.fillerType && geparst.fillerType) out.fillerType = geparst.fillerType;
+  if (!out.weldDetail && geparst.weldDetail) out.weldDetail = geparst.weldDetail;
+  if (!out.layerBuild && geparst.layerBuild) out.layerBuild = geparst.layerBuild;
 }
 
 export function auswerten(words: Wort[], text: string, datei: string, seite: number, pages: number): Zertifikat {
