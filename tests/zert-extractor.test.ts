@@ -72,6 +72,34 @@ describe("Zertifikat-Extractor: TÜV Thüringen (Format-Erkennung + einfache Fel
   it("Prüfberichts-Nr.", () => expect(d.pruefberichts_nr).toBe("TR-77"));
 });
 
+describe("Zertifikat-Extractor: TÜV Thüringen – robust gegen i/l-Vertauschung durch Schriftart-Subsetting-Fehler", () => {
+  // Manche Zeugnisse dieses Formats (TÜV Thüringen Polska) haben einen Encoding-Fehler im PDF:
+  // einzelne Wörter werden mit vertauschtem i/l extrahiert ("thickness" -> "thlckness",
+  // "pipe" -> "plpe", "position" -> "posltion"). Ohne Robustheit dagegen griff bislang eine
+  // falsche Regel und ein Wert aus der Geltungsbereich-Spalte rutschte als Prüfstückwert durch.
+  const text = [
+    "25 Deposited thlckness s (mm) 8.00 ~ 3 Layers 3.00 - 16.00",
+    "26 Outside plpe diameter (mm) 50.00 ~ 25.00",
+    "27 Weiding posltion(s) PH-L045 All except PG",
+    "24 Material thickness t (mm) FW: ~ 3.00",
+  ].join("\n");
+  const d = auswerten([], text, "test.pdf", 1, 1);
+
+  it("Prüfstückdicke (Feld 25) wird trotz 'thlckness'-Tippfehler erkannt", () => {
+    expect(d.schweissgutdicke_s).toBe("8.00");
+  });
+  it("Rohraußendurchmesser (Feld 26) wird trotz 'plpe'-Tippfehler erkannt", () => {
+    expect(d.rohraussendurchmesser).toBe("50.00");
+  });
+  it("Prüfposition (Feld 27) wird trotz 'posltion'-Tippfehler erkannt", () => {
+    expect(d.schweissposition).toBe("PH-L045");
+    expect(d.schweissposition_geltung).toBe("All except PG");
+  });
+  it("Feld 24 (Material thickness t) wird NICHT befüllt, wenn nur ein mit ~/≥ eingeleiteter Geltungsbereichswert dasteht (kein echter Prüfstückwert)", () => {
+    expect(d.werkstoffdicke_t).toBe("");
+  });
+});
+
 describe("zuFormular(): Zertifikat-Rohfelder auf Formularfelder abbilden", () => {
   const basis: Zertifikat = {
     _datei: "x", _seite: 1, _pages: 1, _ocr_used: false, _error: "",
