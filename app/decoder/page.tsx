@@ -1,13 +1,13 @@
 import { parsePruefbezeichnung } from "@/lib/bezeichnung-parser";
 import {
   bwThicknessRange, fwThicknessRange, diameterRange, positionScope,
-  werkstoffgruppeGedeckt, WERKSTOFFGRUPPEN_QUALIFIKATION, POSITION_MATRIX_BW, POSITION_MATRIX_FW,
-  PROZESS_AEQUIVALENZ, FM_SCOPE, ZUSATZART_SCOPE, DETAIL_SCOPE, LAGENAUFBAU_SCOPE,
+  werkstoffgruppeGedeckt, PROZESS_AEQUIVALENZ,
 } from "@/lib/iso9606";
 import {
   VERFAHREN_NAMEN, POSITION_NAMEN, FM_NAMEN, SCHWEISSZUSATZART_NAMEN, SCHWEISSDETAIL_NAMEN,
-  LAGENAUFBAU_NAMEN, WERKSTOFFGRUPPEN_NAMEN,
+  LAGENAUFBAU_NAMEN,
 } from "@/lib/norm-namen";
+import { NormregelnBrowser } from "@/components/NormregelnBrowser";
 
 const unendlich = (v: number | null) => (v === Infinity ? "∞" : v);
 const mitNamen = (codes: string[], namen: Record<string, string>) => codes.map((x) => namen[x] ? `${x} (${namen[x]})` : x).join(", ");
@@ -87,78 +87,10 @@ export default async function Decoder({ searchParams }: { searchParams: Promise<
           {wgErgebnis ? `✔ Gruppe ${bgrp1} deckt Gruppe ${bgrp2} mit ab.` : `✘ Gruppe ${bgrp1} deckt Gruppe ${bgrp2} nicht ab.`}
         </p>
       )}
-      <details>
-        <summary>CEN ISO/TR 15608 – alle Werkstoffgruppen (bescheinigt → deckt ab)</summary>
-        <table><thead><tr><th>Bescheinigt</th><th>Beispielwerkstoffe</th><th>Deckt ab</th></tr></thead><tbody>
-          {Object.entries(WERKSTOFFGRUPPEN_QUALIFIKATION).map(([g, liste]) => (
-            <tr key={g}><td>{g} – {WERKSTOFFGRUPPEN_NAMEN[g]?.name ?? ""}</td><td className="sub">{WERKSTOFFGRUPPEN_NAMEN[g]?.beispiele ?? "–"}</td><td>{liste.join(", ")}</td></tr>
-          ))}
-        </tbody></table>
-      </details>
+      <h2>Implementierte Normregeln</h2>
+      <p className="sub">Suche nach Tabelle, Abschnitt oder Begriff – alle in dieser App hinterlegten Normregeln nach DIN EN ISO 9606-1.</p>
+      <NormregelnBrowser />
 
-      <h2>Alle Qualifikationsmatrizen</h2>
-      <p className="sub">Jede Spalte zeigt, was eine Prüfung in dieser Spalte über die Äquivalenz-/Qualifikationsregeln zusätzlich mit abdeckt.</p>
-      <div className="grid2">
-        <details>
-          <summary>Abschnitt 5.2 – Verfahren-Äquivalenzen</summary>
-          <table><thead><tr><th>Geprüft</th><th>Deckt ab</th></tr></thead><tbody>
-            {Object.entries(PROZESS_AEQUIVALENZ).map(([p, liste]) => <tr key={p}><td>{p} · {VERFAHREN_NAMEN[p] ?? ""}</td><td>{mitNamen(liste, VERFAHREN_NAMEN)}</td></tr>)}
-          </tbody></table>
-        </details>
-        <details>
-          <summary>Tabelle 2/3 – FM-Gruppen</summary>
-          <table><thead><tr><th>Geprüft</th><th>Deckt ab</th></tr></thead><tbody>
-            {Object.entries(FM_SCOPE).map(([f, liste]) => <tr key={f}><td>{f} · {FM_NAMEN[f] ?? ""}</td><td>{liste.join(", ")}</td></tr>)}
-          </tbody></table>
-        </details>
-        <details>
-          <summary>Tabelle 5 – Schweißzusatzarten</summary>
-          <table><thead><tr><th>Geprüft</th><th>Deckt ab</th></tr></thead><tbody>
-            {Object.entries(ZUSATZART_SCOPE).map(([f, liste]) => <tr key={f}><td>{f} · {SCHWEISSZUSATZART_NAMEN[f] ?? ""}</td><td>{liste.join(", ")}</td></tr>)}
-          </tbody></table>
-        </details>
-        <details>
-          <summary>Tabelle 11 – Schweißdetails</summary>
-          <table><thead><tr><th>Geprüft</th><th>Deckt ab</th></tr></thead><tbody>
-            {Object.entries(DETAIL_SCOPE).map(([f, liste]) => <tr key={f}><td>{f} · {SCHWEISSDETAIL_NAMEN[f] ?? ""}</td><td>{liste.join(", ")}</td></tr>)}
-          </tbody></table>
-        </details>
-        <details>
-          <summary>Tabelle 12 – Lagenaufbau</summary>
-          <table><thead><tr><th>Geprüft</th><th>Deckt ab</th></tr></thead><tbody>
-            {Object.entries(LAGENAUFBAU_SCOPE).map(([f, liste]) => <tr key={f}><td>{f} · {LAGENAUFBAU_NAMEN[f] ?? ""}</td><td>{liste.join(", ")}</td></tr>)}
-          </tbody></table>
-        </details>
-        <details>
-          <summary>Tabelle 6/7/8 – Dicke &amp; Durchmesser (Formeln)</summary>
-          <table><tbody>
-            <tr><td>BW-Dicke s &lt; 3</td><td>s bis max(3; 2s)</td></tr>
-            <tr><td>BW-Dicke 3 ≤ s &lt; 12</td><td>3 bis 2s</td></tr>
-            <tr><td>BW-Dicke s ≥ 12</td><td>≥ 3</td></tr>
-            <tr><td>FW-Dicke t &lt; 3</td><td>t bis max(3; 2t)</td></tr>
-            <tr><td>FW-Dicke t ≥ 3</td><td>≥ 3</td></tr>
-            <tr><td>Durchmesser D ≤ 25</td><td>D bis 2D</td></tr>
-            <tr><td>Durchmesser D &gt; 25</td><td>≥ max(0,5D; 25 mm)</td></tr>
-          </tbody></table>
-        </details>
-      </div>
-
-      <h2>Positions-Matrizen (Tabelle 9/10)</h2>
-      <p className="sub">Geprüfte Position → qualifizierte Positionen, ohne die Sonderregeln aus Abschnitt 5.8 (PC-Zusatzprüfung, Mehrpositionsprüfung – siehe Schweißer-Detailseite für den vollständigen, je Zertifikat berechneten Geltungsbereich inkl. dieser Zusatzregeln).</p>
-      <div className="grid2">
-        <div>
-          <h3>BW · Stumpfnaht (Tabelle 9)</h3>
-          <table><thead><tr><th>Geprüft</th><th>Qualifiziert</th></tr></thead><tbody>
-            {Object.entries(POSITION_MATRIX_BW).map(([p, liste]) => <tr key={p}><td>{p} · {POSITION_NAMEN[p] ?? ""}</td><td>{mitNamen(liste, POSITION_NAMEN)}</td></tr>)}
-          </tbody></table>
-        </div>
-        <div>
-          <h3>FW · Kehlnaht (Tabelle 10)</h3>
-          <table><thead><tr><th>Geprüft</th><th>Qualifiziert</th></tr></thead><tbody>
-            {Object.entries(POSITION_MATRIX_FW).map(([p, liste]) => <tr key={p}><td>{p} · {POSITION_NAMEN[p] ?? ""}</td><td>{mitNamen(liste, POSITION_NAMEN)}</td></tr>)}
-          </tbody></table>
-        </div>
-      </div>
       <p className="hinweis">
         Mussmann-Beispiele und ein Speicher für Norm-PDFs aus der Referenz-App sind hier (noch) nicht umgesetzt.
         Wichtig: Diese Seite zeigt die reinen Normtabellen. Ein echtes Zertifikat kann einen breiteren
