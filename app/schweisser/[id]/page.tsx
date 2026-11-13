@@ -7,6 +7,7 @@ import { ZertifikatUpload } from "@/components/ZertifikatUpload";
 import { ampel, bestaetigungFaellig } from "@/lib/fristen";
 import { zertifikatFelderAusFormular } from "@/lib/cert-save";
 import { pruefbezeichnung, geltungsbereichAufschluesseln } from "@/lib/iso9606";
+import { VERFAHREN_NAMEN, WERKSTOFFGRUPPEN_NAMEN, FM_NAMEN, SCHWEISSZUSATZART_NAMEN, SCHWEISSDETAIL_NAMEN, LAGENAUFBAU_NAMEN, POSITION_NAMEN } from "@/lib/norm-namen";
 
 async function stammdatenSpeichern(fd: FormData) {
   "use server";
@@ -114,25 +115,46 @@ export default async function SchweisserDetail({ params }: { params: Promise<{ i
 
       {certs.filter((c) => ["gruen", "gelb"].includes(ampel(c.valid_until).farbe)).map((c) => {
         const g = geltungsbereichAufschluesseln(c);
-        const eintrag = (label: string, e: ReturnType<typeof geltungsbereichAufschluesseln>["verfahren"]) => e && (
-          <tr key={label}><td>{label}</td><td>{e.geprueft}</td><td>{e.decktAuch.length > 1 ? e.decktAuch.join(", ") : <span className="sub">nur sich selbst</span>}</td></tr>
+        const mitNamen = (codes: string[], namen: Record<string, string>) => codes.map((x) => namen[x] ? `${x} (${namen[x]})` : x).join(", ");
+        const eintrag = (label: string, e: ReturnType<typeof geltungsbereichAufschluesseln>["verfahren"], namen: Record<string, string>) => e && (
+          <tr key={label}>
+            <td>{label}</td>
+            <td>{e.geprueft}{namen[e.geprueft] ? ` · ${namen[e.geprueft]}` : ""}</td>
+            <td>{e.decktAuch.length > 1 ? mitNamen(e.decktAuch, namen) : <span className="sub">nur sich selbst</span>}</td>
+          </tr>
         );
+        const produktformHinweise = [
+          c.product_type === "T" && "Rohrprüfung mit D > 25 mm qualifiziert zusätzlich Blech (P).",
+          c.fixed_pipe && "Blechprüfung qualifiziert zusätzlich fest eingespanntes Rohr ab D ≥ 500 mm.",
+          c.rotating_pipe && "Blechprüfung qualifiziert zusätzlich rotierendes Rohr ab D ≥ 75 mm (Positionen PA–PD).",
+        ].filter(Boolean);
+        const nahtartHinweise = [
+          c.joint_type === "BW" && !c.has_fillet_test && !c.combined_joint_test && "BW qualifiziert FW NICHT automatisch – nur mit Zusatzprüfung Kehlnaht oder kombinierter Prüfung.",
+          c.has_fillet_test && "Zusatzprüfung Kehlnaht vorhanden: qualifiziert zusätzlich für FW.",
+          c.combined_joint_test && "Kombinierte BW/FW-Prüfung: qualifiziert für beide Nahtarten.",
+        ].filter(Boolean);
         return (
-          <details key={c.id} style={{ marginBottom: 8 }}>
+          <details key={c.id} open style={{ marginBottom: 8 }}>
             <summary>Vollständiger Geltungsbereich – <code>{c.bezeichnung || pruefbezeichnung(c)}</code></summary>
             <table><thead><tr><th>Kriterium</th><th>Geprüft</th><th>Deckt auch</th></tr></thead><tbody>
-              {eintrag("Verfahren", g.verfahren)}
-              {eintrag("Werkstoffgruppe", g.werkstoffgruppe)}
-              {eintrag("FM-Gruppe", g.fmGruppe)}
-              {eintrag("Schweißzusatzart", g.schweisszusatzart)}
-              {eintrag("Schweißdetail", g.schweissdetail)}
-              {eintrag("Lagenaufbau", g.lagenaufbau)}
+              {eintrag("Verfahren", g.verfahren, VERFAHREN_NAMEN)}
+              {eintrag("Werkstoffgruppe", g.werkstoffgruppe, Object.fromEntries(Object.entries(WERKSTOFFGRUPPEN_NAMEN).map(([k, v]) => [k, v.name])))}
+              {eintrag("FM-Gruppe", g.fmGruppe, FM_NAMEN)}
+              {eintrag("Schweißzusatzart", g.schweisszusatzart, SCHWEISSZUSATZART_NAMEN)}
+              {eintrag("Schweißdetail", g.schweissdetail, SCHWEISSDETAIL_NAMEN)}
+              {eintrag("Lagenaufbau", g.lagenaufbau, LAGENAUFBAU_NAMEN)}
               <tr><td>Produktform</td><td colSpan={2}>{g.produktform === "T" ? "T · Rohr" : g.produktform === "P" ? "P · Blech" : "–"}</td></tr>
-              <tr><td>Nahtart</td><td colSpan={2}>{g.nahtart ?? "–"}</td></tr>
+              <tr><td>Nahtart</td><td colSpan={2}>{g.nahtart === "BW" ? "BW · Stumpfnaht" : g.nahtart === "FW" ? "FW · Kehlnaht" : "–"}</td></tr>
               <tr><td>Dicke</td><td colSpan={2}>{g.dicke ? `${g.dicke.min} – ${g.dicke.max ?? "∞"} mm` : "–"}</td></tr>
               <tr><td>Durchmesser</td><td colSpan={2}>{g.durchmesser ? `${g.durchmesser.min} – ${g.durchmesser.max ?? "∞"} mm` : "– (Blech)"}</td></tr>
-              <tr><td>Positionen</td><td colSpan={2}>{g.positionen?.join(", ") ?? "–"}</td></tr>
+              <tr><td>Positionen</td><td colSpan={2}>{g.positionen ? mitNamen(g.positionen, POSITION_NAMEN) : "–"}</td></tr>
             </tbody></table>
+            {(produktformHinweise.length > 0 || nahtartHinweise.length > 0) && (
+              <ul className="sub" style={{ margin: "8px 0 0 18px" }}>
+                {produktformHinweise.map((h, i) => <li key={`p${i}`}>{h}</li>)}
+                {nahtartHinweise.map((h, i) => <li key={`n${i}`}>{h}</li>)}
+              </ul>
+            )}
           </details>
         );
       })}
