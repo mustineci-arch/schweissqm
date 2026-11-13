@@ -62,6 +62,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ f
         <Link className="btn sek" href="/wpqr/ap-protokoll">📝 AP-Protokoll</Link>{" "}
         <a className="btn sek" href="/wpqr/export">📤 Excel-Export</a>{" "}
         <Link className="btn sek" href="/wpqr/import">📥 Excel-Liste importieren</Link>{" "}
+        <Link className="btn sek" href="/wpqr/legacy-import">🗂 Desktop-App-Daten (JSON)</Link>{" "}
         <Link className="btn sek" href="/wpqr/einstellungen">⚙️ Einstellungen</Link>
       </p>
       {fehler && <p className="err">{fehler}</p>}
