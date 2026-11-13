@@ -7,6 +7,7 @@ const gruppen: { titel: string; links: [string, string][] }[] = [
   { titel: "I · Erfassen", links: [["/projekte", "Projekte"]] },
   { titel: "II · Schweißen", links: [["/auftrag", "Auftrag"], ["/wps", "WPS"], ["/wpqr", "WPQR"], ["/schweisser", "Schweißer"], ["/naehte", "Nähte"]] },
   { titel: "III · Nachweisen", links: [["/deckung", "Deckungsprüfung"], ["/fristen", "Fristen"]] },
+  { titel: "IV · Nachschlagen", links: [["/decoder", "Decoder & Normregeln"]] },
   { titel: "Verwaltung", links: [["/admin", "Benutzer & Rollen"]] },
 ];
 
